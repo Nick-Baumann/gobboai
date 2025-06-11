@@ -31,3 +31,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-06-07: added schema validation on coach output
 - 2025-06-08: coach output is now strict JSON
 - 2025-06-10: promoted
+- 2025-06-11: kept Adam, AdamW was worse here
