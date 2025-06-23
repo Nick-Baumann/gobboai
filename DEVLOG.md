@@ -37,3 +37,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-06-19: trained for 6 epochs instead of 8
 - 2025-06-20: candidate passed at 56%
 - 2025-06-21: added one more validation check
+- 2025-06-23: candidate passed at 61%
