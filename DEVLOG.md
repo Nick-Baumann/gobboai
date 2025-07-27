@@ -68,3 +68,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-07-24: fixed an off-by-one in the buffer iter
 - 2025-07-24: loss curve smoother now
 - 2025-07-26: fixed a flaky test
+- 2025-07-27: clarified a comment
