@@ -80,3 +80,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-08-05: clarified a comment
 - 2025-08-05: candidate passed at 61%
 - 2025-08-06: fixed a panic on empty PGN
+- 2025-08-06: renamed a confusing field
