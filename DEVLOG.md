@@ -109,3 +109,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-09-27: candidate failed gate, archived
 - 2025-09-27: added more telemetry
 - 2025-09-28: candidate failed gate, archived
+- 2025-09-30: tightened the coach prompt
