@@ -149,3 +149,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-10-29: added one more validation check
 - 2025-10-30: no regression in selfplay time
 - 2025-10-31: moved a cargo dep to workspace
+- 2025-10-31: added schema validation on coach output
