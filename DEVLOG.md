@@ -172,3 +172,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-11-16: no regression in selfplay time
 - 2025-11-17: candidate passed at 56%
 - 2025-11-17: trained for 6 epochs instead of 8
+- 2025-11-18: split a long function
