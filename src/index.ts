@@ -321,7 +321,7 @@ async function startWebhook(
   path = '/webhook/whatsapp',
   autoReply: string | undefined,
   verbose: boolean
-) {
+): Promise<import('http').Server> {
   // Start Express webhook; generate replies via config or CLI flag.
   const env = readEnv();
   const app = express();
@@ -375,11 +375,17 @@ async function startWebhook(
     res.status(404).send('warelay webhook: not found');
   });
 
-  return new Promise<void>((resolve) => {
-    app.listen(port, () => {
+  return new Promise((resolve) => {
+    const server = app.listen(port, () => {
       console.log(`📥 Webhook listening on http://localhost:${port}${path}`);
-      resolve();
+      resolve(server);
     });
+  });
+}
+
+function waitForever() {
+  return new Promise<void>(() => {
+    /* never resolve to keep process alive */
   });
 }
 
@@ -698,7 +704,14 @@ With Tailscale:
       console.error('Port must be between 1 and 65535');
       process.exit(1);
     }
-    await startWebhook(port, opts.path, opts.reply, Boolean(opts.verbose));
+    const server = await startWebhook(port, opts.path, opts.reply, Boolean(opts.verbose));
+    process.on('SIGINT', () => {
+      server.close(() => {
+        console.log('\n👋 Webhook stopped');
+        process.exit(0);
+      });
+    });
+    await waitForever();
   });
 
 program
@@ -728,7 +741,13 @@ program
     console.log(`🌐 Public webhook URL (via Funnel): ${publicUrl}`);
 
     // Start webhook locally (after funnel success)
-    await startWebhook(port, opts.path, undefined, Boolean(opts.verbose));
+    const server = await startWebhook(port, opts.path, undefined, Boolean(opts.verbose));
+    process.on('SIGINT', () => {
+      server.close(() => {
+        console.log('\n👋 Webhook stopped');
+        process.exit(0);
+      });
+    });
 
     // Configure Twilio sender webhook
     const client = createClient(env);
@@ -736,6 +755,7 @@ program
     await updateWebhook(client, senderSid, publicUrl, 'POST');
 
     console.log('\nSetup complete. Leave this process running to keep the webhook online. Ctrl+C to stop.');
+    await waitForever();
   });
 
 program.parseAsync(process.argv);
