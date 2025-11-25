@@ -38,12 +38,14 @@ import {
 	loginWeb,
 	monitorWebInbox,
 	sendMessageWeb,
+	WA_WEB_AUTH_DIR,
 	webAuthExists,
 } from "./provider-web.js";
 import type { Provider } from "./utils.js";
 import {
 	assertProvider,
 	CONFIG_DIR,
+	jidToE164,
 	normalizeE164,
 	normalizePath,
 	sleep,
@@ -1544,6 +1546,38 @@ async function pickProvider(pref: Provider | "auto"): Promise<Provider> {
 	return "twilio";
 }
 
+function readWebSelfId() {
+	const credsPath = path.join(WA_WEB_AUTH_DIR, "creds.json");
+	try {
+		if (!fs.existsSync(credsPath)) {
+			return { e164: null, jid: null };
+		}
+		const raw = fs.readFileSync(credsPath, "utf-8");
+		const parsed = JSON.parse(raw) as { me?: { id?: string } } | undefined;
+		const jid = parsed?.me?.id ?? null;
+		const e164 = jid ? jidToE164(jid) : null;
+		return { e164, jid };
+	} catch {
+		return { e164: null, jid: null };
+	}
+}
+
+function logWebSelfId(runtime: RuntimeEnv = defaultRuntime) {
+	const { e164, jid } = readWebSelfId();
+	const details =
+		e164 || jid
+			? `${e164 ?? "unknown"}${jid ? ` (jid ${jid})` : ""}`
+			: "unknown";
+	runtime.log(info(`Listening on web session: ${details}`));
+}
+
+function logTwilioFrom(runtime: RuntimeEnv = defaultRuntime) {
+	const env = readEnv(runtime);
+	runtime.log(
+		info(`Provider: twilio (polling inbound) | from ${env.whatsappFrom}`),
+	);
+}
+
 async function monitorTwilio(
 	intervalSeconds: number,
 	lookbackMinutes: number,
@@ -2013,6 +2047,7 @@ Examples:
 
 		if (provider === "web") {
 			defaultRuntime.log(info("Provider: web (personal WhatsApp Web session)"));
+			logWebSelfId();
 			try {
 				await monitorWebProvider(Boolean(opts.verbose));
 				return;
@@ -2029,7 +2064,7 @@ Examples:
 		}
 
 		ensureTwilioEnv();
-		defaultRuntime.log(info("Provider: twilio (polling inbound)"));
+		logTwilioFrom();
 		await monitorTwilio(intervalSeconds, lookbackMinutes);
 	});
 
