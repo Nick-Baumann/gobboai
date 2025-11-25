@@ -34,13 +34,12 @@ jobs:
       - name: Install dependencies
         env:
           CI: true
-          NPM_CONFIG_ENGINE_STRICT: "false"
         run: |
           export PATH="$NODE_BIN:$PATH"
           which node
           node -v
           pnpm -v
-          pnpm install --no-frozen-lockfile --ignore-scripts=false
+          pnpm install --ignore-scripts=false --config.engine-strict=false --config.enable-pre-post-scripts=true || pnpm install --ignore-scripts=false --config.engine-strict=false --config.enable-pre-post-scripts=true
 
       - name: Lint
         run: pnpm lint

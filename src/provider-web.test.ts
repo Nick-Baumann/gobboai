@@ -38,15 +38,15 @@ vi.mock("qrcode-terminal", () => ({
 	generate: vi.fn(),
 }));
 
+import { monitorWebProvider } from "./index.js";
 import {
 	createWaSocket,
 	loginWeb,
-	monitorWebInbox,
 	logWebSelfId,
+	monitorWebInbox,
 	sendMessageWeb,
 	waitForWaConnection,
 } from "./provider-web.js";
-import { monitorWebProvider } from "./index.js";
 
 const baileys = (await import(
 	"@whiskeysockets/baileys"
@@ -87,8 +87,9 @@ describe("provider-web", () => {
 			expect.objectContaining({ printQRInTerminal: false }),
 		);
 		const passed = makeWASocket.mock.calls[0][0];
-		const passedLogger = (passed as { logger?: { level?: string; trace?: unknown } })
-			.logger;
+		const passedLogger = (
+			passed as { logger?: { level?: string; trace?: unknown } }
+		).logger;
 		expect(passedLogger?.level).toBe("silent");
 		expect(typeof passedLogger?.trace).toBe("function");
 		const sock = getLastSocket();
@@ -173,10 +174,18 @@ describe("provider-web", () => {
 			expect.objectContaining({ body: "ping", from: "+999", to: "+123" }),
 		);
 		expect(sock.readMessages).toHaveBeenCalledWith([
-			{ remoteJid: "999@s.whatsapp.net", id: "abc", participant: undefined, fromMe: false },
+			{
+				remoteJid: "999@s.whatsapp.net",
+				id: "abc",
+				participant: undefined,
+				fromMe: false,
+			},
 		]);
 		expect(sock.sendPresenceUpdate).toHaveBeenCalledWith("available");
-		expect(sock.sendPresenceUpdate).toHaveBeenCalledWith("composing", "999@s.whatsapp.net");
+		expect(sock.sendPresenceUpdate).toHaveBeenCalledWith(
+			"composing",
+			"999@s.whatsapp.net",
+		);
 		expect(sock.sendMessage).toHaveBeenCalledWith("999@s.whatsapp.net", {
 			text: "pong",
 		});
@@ -263,23 +272,27 @@ describe("provider-web", () => {
 			mediaUrl: "https://example.com/img.png",
 		});
 
-		let capturedOnMessage: ((msg: any) => Promise<void>) | undefined;
-		const listenerFactory = async (opts: { onMessage: (msg: any) => Promise<void> }) => {
+		let capturedOnMessage:
+			| ((msg: import("./provider-web.js").WebInboundMessage) => Promise<void>)
+			| undefined;
+		const listenerFactory = async (opts: {
+			onMessage: (
+				msg: import("./provider-web.js").WebInboundMessage,
+			) => Promise<void>;
+		}) => {
 			capturedOnMessage = opts.onMessage;
 			return { close: vi.fn() };
 		};
 
-		const fetchMock = vi
-			.spyOn(global as any, "fetch")
-			.mockResolvedValue({
-				ok: true,
-				body: true,
-				arrayBuffer: async () => new ArrayBuffer(1024),
-				headers: { get: () => "image/png" },
-				status: 200,
-			} as any);
+		const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+			ok: true,
+			body: true,
+			arrayBuffer: async () => new ArrayBuffer(1024),
+			headers: { get: () => "image/png" },
+			status: 200,
+		} as Response);
 
-		await monitorWebProvider(false, listenerFactory as any, false, resolver);
+		await monitorWebProvider(false, listenerFactory, false, resolver);
 
 		expect(capturedOnMessage).toBeDefined();
 		await capturedOnMessage?.({
@@ -303,9 +316,7 @@ describe("provider-web", () => {
 			.mockReturnValue(true as never);
 		const readSpy = vi
 			.spyOn(fsSync, "readFileSync")
-			.mockReturnValue(
-				JSON.stringify({ me: { id: "12345@s.whatsapp.net" } }),
-			);
+			.mockReturnValue(JSON.stringify({ me: { id: "12345@s.whatsapp.net" } }));
 		const runtime = {
 			log: vi.fn(),
 			error: vi.fn(),

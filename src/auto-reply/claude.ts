@@ -104,7 +104,9 @@ export function parseClaudeJson(
 		try {
 			const parsed = JSON.parse(candidate);
 			if (firstParsed === undefined) firstParsed = parsed;
-			let validation;
+			let validation:
+				| z.SafeParseReturnType<unknown, z.infer<typeof ClaudeJsonSchema>>
+				| { success: false };
 			try {
 				validation = ClaudeJsonSchema.safeParse(parsed);
 			} catch {
@@ -131,7 +133,9 @@ export function parseClaudeJson(
 		}
 	}
 	if (firstParsed !== undefined) {
-		let validation;
+		let validation:
+			| z.SafeParseReturnType<unknown, z.infer<typeof ClaudeJsonSchema>>
+			| { success: false };
 		try {
 			validation = ClaudeJsonSchema.safeParse(firstParsed);
 		} catch {
