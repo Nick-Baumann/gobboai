@@ -1,27 +1,28 @@
-import fs from "node:fs/promises";
 import fsSync from "node:fs";
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { proto } from "@whiskeysockets/baileys";
 import {
+	type AnyMessageContent,
 	DisconnectReason,
+	downloadMediaMessage,
 	fetchLatestBaileysVersion,
 	makeCacheableSignalKeyStore,
 	makeWASocket,
 	useMultiFileAuthState,
-	downloadMediaMessage,
-	type AnyMessageContent,
+	type WAMessage,
 } from "@whiskeysockets/baileys";
 import pino from "pino";
 import qrcode from "qrcode-terminal";
-import { danger, info, isVerbose, logVerbose, success, warn } from "./globals.js";
-import { ensureDir, jidToE164, toWhatsappJid } from "./utils.js";
-import type { Provider } from "./utils.js";
-import { waitForever } from "./cli/wait.js";
 import { getReplyFromConfig } from "./auto-reply/reply.js";
-import { defaultRuntime, type RuntimeEnv } from "./runtime.js";
-import { logInfo, logWarn } from "./logger.js";
+import { waitForever } from "./cli/wait.js";
+import { danger, info, isVerbose, logVerbose, success } from "./globals.js";
+import { logInfo } from "./logger.js";
 import { saveMediaBuffer } from "./media/store.js";
+import { defaultRuntime, type RuntimeEnv } from "./runtime.js";
+import type { Provider } from "./utils.js";
+import { ensureDir, jidToE164, toWhatsappJid } from "./utils.js";
 
 function formatDuration(ms: number) {
 	return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
@@ -231,7 +232,11 @@ export type WebInboundMessage = {
 	timestamp?: number;
 	sendComposing: () => Promise<void>;
 	reply: (text: string) => Promise<void>;
-	sendMedia: (payload: { image: Buffer; caption?: string; mimetype?: string }) => Promise<void>;
+	sendMedia: (payload: {
+		image: Buffer;
+		caption?: string;
+		mimetype?: string;
+	}) => Promise<void>;
 	mediaPath?: string;
 	mediaType?: string;
 	mediaUrl?: string;
@@ -248,7 +253,9 @@ export async function monitorWebInbox(options: {
 		await sock.sendPresenceUpdate("available");
 		if (isVerbose()) logVerbose("Sent global 'available' presence on connect");
 	} catch (err) {
-		logVerbose(`Failed to send 'available' presence on connect: ${String(err)}`);
+		logVerbose(
+			`Failed to send 'available' presence on connect: ${String(err)}`,
+		);
 	}
 	const selfJid = sock.user?.id;
 	const selfE164 = selfJid ? jidToE164(selfJid) : null;
@@ -275,7 +282,9 @@ export async function monitorWebInbox(options: {
 					]);
 					if (isVerbose()) {
 						const suffix = participant ? ` (participant ${participant})` : "";
-						logVerbose(`Marked message ${id} as read for ${remoteJid}${suffix}`);
+						logVerbose(
+							`Marked message ${id} as read for ${remoteJid}${suffix}`,
+						);
 					}
 				} catch (err) {
 					logVerbose(`Failed to mark message ${id} read: ${String(err)}`);
@@ -389,16 +398,12 @@ export async function monitorWebProvider(
 				},
 			);
 			if (!replyResult || (!replyResult.text && !replyResult.mediaUrl)) {
-				logVerbose(
-					"Skipping auto-reply: no text/media returned from resolver",
-				);
+				logVerbose("Skipping auto-reply: no text/media returned from resolver");
 				return;
 			}
 			try {
 				if (replyResult.mediaUrl) {
-					logVerbose(
-						`Web auto-reply media detected: ${replyResult.mediaUrl}`,
-					);
+					logVerbose(`Web auto-reply media detected: ${replyResult.mediaUrl}`);
 					try {
 						const media = await loadWebMedia(replyResult.mediaUrl);
 						if (isVerbose()) {
@@ -417,9 +422,7 @@ export async function monitorWebProvider(
 						);
 					} catch (err) {
 						console.error(
-							danger(
-								`Failed sending web media to ${msg.from}: ${String(err)}`,
-							),
+							danger(`Failed sending web media to ${msg.from}: ${String(err)}`),
 						);
 						if (replyResult.text) {
 							await msg.reply(replyResult.text);
@@ -499,9 +502,7 @@ export function logWebSelfId(
 		e164 || jid
 			? `${e164 ?? "unknown"}${jid ? ` (jid ${jid})` : ""}`
 			: "unknown";
-	const prefix = includeProviderPrefix
-		? "Web Provider: "
-		: "";
+	const prefix = includeProviderPrefix ? "Web Provider: " : "";
 	runtime.log(info(`${prefix}${details}`));
 }
 
@@ -526,7 +527,9 @@ function extractText(message: proto.IMessage | undefined): string | undefined {
 	return undefined;
 }
 
-function extractMediaPlaceholder(message: proto.IMessage | undefined): string | undefined {
+function extractMediaPlaceholder(
+	message: proto.IMessage | undefined,
+): string | undefined {
 	if (!message) return undefined;
 	if (message.imageMessage) return "<media:image>";
 	if (message.videoMessage) return "<media:video>";
@@ -559,10 +562,15 @@ async function downloadInboundMedia(
 		return undefined;
 	}
 	try {
-		const buffer = (await downloadMediaMessage(msg as any, "buffer", {}, {
-			reuploadRequest: sock.updateMediaMessage,
-			logger: (sock as { logger?: unknown })?.logger as any,
-		})) as Buffer;
+		const buffer = (await downloadMediaMessage(
+			msg as WAMessage,
+			"buffer",
+			{},
+			{
+				reuploadRequest: sock.updateMediaMessage,
+				logger: sock.logger,
+			},
+		)) as Buffer;
 		return { buffer, mimetype };
 	} catch (err) {
 		logVerbose(`downloadMediaMessage failed: ${String(err)}`);
@@ -586,20 +594,21 @@ async function loadWebMedia(
 		if (array.length > MAX_WEB_BYTES) {
 			throw new Error(
 				`Media exceeds ${Math.floor(MAX_WEB_BYTES / (1024 * 1024))}MB limit (got ${(
-					array.length /
-					(1024 * 1024)
+					array.length / (1024 * 1024)
 				).toFixed(1)}MB)`,
 			);
 		}
-		return { buffer: array, contentType: res.headers.get("content-type") ?? undefined };
+		return {
+			buffer: array,
+			contentType: res.headers.get("content-type") ?? undefined,
+		};
 	}
 	// Local path
 	const data = await fs.readFile(mediaUrl);
 	if (data.length > MAX_WEB_BYTES) {
 		throw new Error(
 			`Media exceeds ${Math.floor(MAX_WEB_BYTES / (1024 * 1024))}MB limit (got ${(
-				data.length /
-				(1024 * 1024)
+				data.length / (1024 * 1024)
 			).toFixed(1)}MB)`,
 		);
 	}

@@ -49,7 +49,9 @@ const ReplySchema = z
 		mediaUrl: z.string().optional(),
 		session: z
 			.object({
-				scope: z.union([z.literal("per-sender"), z.literal("global")]).optional(),
+				scope: z
+					.union([z.literal("per-sender"), z.literal("global")])
+					.optional(),
 				resetTriggers: z.array(z.string()).optional(),
 				idleMinutes: z.number().int().positive().optional(),
 				store: z.string().optional(),
@@ -70,7 +72,8 @@ const ReplySchema = z
 	.refine(
 		(val) => (val.mode === "text" ? Boolean(val.text) : Boolean(val.command)),
 		{
-			message: "reply.text is required for mode=text; reply.command is required for mode=command",
+			message:
+				"reply.text is required for mode=text; reply.command is required for mode=command",
 		},
 	);
 
@@ -93,7 +96,9 @@ export function loadConfig(): WarelayConfig {
 		const validated = WarelaySchema.safeParse(parsed);
 		if (!validated.success) {
 			console.error("Invalid warelay config:");
-			validated.error.issues.forEach((iss) => console.error(`- ${iss.path.join(".")}: ${iss.message}`));
+			for (const iss of validated.error.issues) {
+				console.error(`- ${iss.path.join(".")}: ${iss.message}`);
+			}
 			return {};
 		}
 		return validated.data as WarelayConfig;
