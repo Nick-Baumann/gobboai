@@ -2,7 +2,11 @@
 
 ## [Unreleased] 0.1.3
 
-_Add notes here for the next release._
+### Features
+- Added `cwd` option to command reply config for setting the working directory where commands execute. Essential for Claude Code to have proper project context.
+
+### Developer notes
+- Command auto-replies now pass `{ timeoutMs, cwd }` into the command runner; custom runners/tests that stub `runCommandWithTimeout` should accept the options object as well as the legacy numeric timeout.
 
 ## 0.1.2 — 2025-11-25
 

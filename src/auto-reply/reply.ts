@@ -288,11 +288,13 @@ export async function getReplyFromConfig(
 				[CLAUDE_IDENTITY_PREFIX, existingBody].filter(Boolean).join("\n\n"),
 			];
 		}
-		logVerbose(`Running command auto-reply: ${finalArgv.join(" ")}`);
+		logVerbose(
+			`Running command auto-reply: ${finalArgv.join(" ")}${reply.cwd ? ` (cwd: ${reply.cwd})` : ""}`,
+		);
 		const started = Date.now();
 		try {
 			const { stdout, stderr, code, signal, killed } = await enqueueCommand(
-				() => commandRunner(finalArgv, timeoutMs),
+				() => commandRunner(finalArgv, { timeoutMs, cwd: reply.cwd }),
 				{
 					onWait: (waitMs, queuedAhead) => {
 						if (isVerbose()) {

@@ -21,6 +21,8 @@ warelay reads `~/.warelay/warelay.json` (JSON5 accepted). Add a command-mode rep
     allowFrom: ["+15551234567"],
     reply: {
       mode: "command",
+      // Working directory for command execution (useful for Claude Code project context).
+      cwd: "/Users/you/Projects/my-project",
       // Prepended before the inbound body; good for system prompts.
       bodyPrefix: "You are a concise WhatsApp assistant. Keep replies under 1500 characters.\n\n",
       // Claude CLI argv; the final element is the prompt/body provided by warelay.
@@ -38,6 +40,7 @@ warelay reads `~/.warelay/warelay.json` (JSON5 accepted). Add a command-mode rep
 ```
 
 Notes on this configuration:
+- `cwd` sets the working directory where the command runs. This is essential for Claude Code to have the right project context—Claude will see the project's `CLAUDE.md`, have access to project files, and understand the codebase structure.
 - warelay automatically injects a Claude identity prefix and the correct `--output-format`/`-p` flags when `command[0]` is `claude` and `claudeOutputFormat` is set.
 - Sessions are stored in `~/.warelay/sessions.json`; `scope: per-sender` keeps separate threads for each contact.
 - `bodyPrefix` is added before the inbound message body that reaches Claude. The string above mirrors the built-in 1500-character WhatsApp guardrail.
