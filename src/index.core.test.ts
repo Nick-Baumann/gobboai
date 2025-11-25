@@ -116,6 +116,36 @@ describe("config and templating", () => {
 		expect(result?.text).toContain("http://example.com/a.jpg");
 	});
 
+	it("getReplyFromConfig extracts media URL from command stdout", async () => {
+		const runSpy = vi.spyOn(index, "runCommandWithTimeout").mockResolvedValue({
+			stdout: "hello\nMEDIA: https://example.com/img.jpg\n",
+			stderr: "",
+			code: 0,
+			signal: null,
+			killed: false,
+		});
+		const cfg = {
+			inbound: {
+				reply: {
+					mode: "command" as const,
+					command: ["echo", "{{Body}}"],
+				},
+			},
+		};
+		const result = await index.getReplyFromConfig(
+			{
+				Body: "hi",
+				From: "+1",
+				To: "+2",
+			},
+			undefined,
+			cfg,
+			runSpy,
+		);
+		expect(result?.text).toBe("hello");
+		expect(result?.mediaUrl).toBe("https://example.com/img.jpg");
+	});
+
 	it("getReplyFromConfig runs command and manages session store", async () => {
 		const tmpStore = path.join(os.tmpdir(), `warelay-store-${Date.now()}.json`);
 		vi.spyOn(crypto, "randomUUID").mockReturnValue("session-123");
