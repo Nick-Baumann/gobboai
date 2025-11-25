@@ -26,6 +26,7 @@ export type WarelayConfig = {
 			mode: ReplyMode;
 			text?: string; // for mode=text, can contain {{Body}}
 			command?: string[]; // for mode=command, argv with templates
+			cwd?: string; // working directory for command execution
 			template?: string; // prepend template string when building command/prompt
 			timeoutSeconds?: number; // optional command timeout; defaults to 600s
 			bodyPrefix?: string; // optional string prepended to Body before templating
@@ -43,6 +44,7 @@ const ReplySchema = z
 		mode: z.union([z.literal("text"), z.literal("command")]),
 		text: z.string().optional(),
 		command: z.array(z.string()).optional(),
+		cwd: z.string().optional(),
 		template: z.string().optional(),
 		timeoutSeconds: z.number().int().positive().optional(),
 		bodyPrefix: z.string().optional(),

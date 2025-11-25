@@ -43,14 +43,26 @@ export type SpawnResult = {
 	killed: boolean;
 };
 
+export type CommandOptions = {
+	timeoutMs: number;
+	cwd?: string;
+};
+
 export async function runCommandWithTimeout(
 	argv: string[],
-	timeoutMs: number,
+	optionsOrTimeout: number | CommandOptions,
 ): Promise<SpawnResult> {
+	const options: CommandOptions =
+		typeof optionsOrTimeout === "number"
+			? { timeoutMs: optionsOrTimeout }
+			: optionsOrTimeout;
+	const { timeoutMs, cwd } = options;
+
 	// Spawn with inherited stdin (TTY) so tools like `claude` don't hang.
 	return await new Promise((resolve, reject) => {
 		const child = spawn(argv[0], argv.slice(1), {
 			stdio: ["inherit", "pipe", "pipe"],
+			cwd,
 		});
 		let stdout = "";
 		let stderr = "";
