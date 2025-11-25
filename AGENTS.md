@@ -34,3 +34,4 @@
 
 ## Agent-Specific Notes
 - If the relay is running in tmux (`warelay-relay`), restart it after code changes: kill pane/session and run `pnpm warelay relay --verbose` inside tmux. Check tmux before editing; keep the watcher healthy if you start it.
+- Also read the shared guardrails at `~/Projects/oracle/AGENTS.md` and `~/Projects/agent-scripts/AGENTS.MD` before making changes; align with any cross-repo rules noted there.
