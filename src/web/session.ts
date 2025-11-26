@@ -133,6 +133,21 @@ export async function webAuthExists() {
     .catch(() => false);
 }
 
+export async function logoutWeb(runtime: RuntimeEnv = defaultRuntime) {
+  const exists = await webAuthExists();
+  if (!exists) {
+    runtime.log(info("No WhatsApp Web session found; nothing to delete."));
+    return false;
+  }
+  await fs.rm(WA_WEB_AUTH_DIR, { recursive: true, force: true });
+  runtime.log(
+    success(
+      "Cleared WhatsApp Web credentials. Run `warelay login --provider web` to relink.",
+    ),
+  );
+  return true;
+}
+
 function readWebSelfId() {
   // Read the cached WhatsApp Web identity (jid + E.164) from disk if present.
   const credsPath = path.join(WA_WEB_AUTH_DIR, "creds.json");

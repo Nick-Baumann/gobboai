@@ -5,7 +5,12 @@ import { statusCommand } from "../commands/status.js";
 import { webhookCommand } from "../commands/webhook.js";
 import { ensureTwilioEnv } from "../env.js";
 import { danger, info, setVerbose, setYes, warn } from "../globals.js";
-import { loginWeb, monitorWebProvider, pickProvider } from "../provider-web.js";
+import {
+  loginWeb,
+  logoutWeb,
+  monitorWebProvider,
+  pickProvider,
+} from "../provider-web.js";
 import { defaultRuntime } from "../runtime.js";
 import type { Provider } from "../utils.js";
 import { VERSION } from "../version.js";
@@ -100,6 +105,18 @@ export function buildProgram() {
         await loginWeb(Boolean(opts.verbose));
       } catch (err) {
         defaultRuntime.error(danger(`Web login failed: ${String(err)}`));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  program
+    .command("logout")
+    .description("Clear cached WhatsApp Web credentials")
+    .action(async () => {
+      try {
+        await logoutWeb(defaultRuntime);
+      } catch (err) {
+        defaultRuntime.error(danger(`Logout failed: ${String(err)}`));
         defaultRuntime.exit(1);
       }
     });

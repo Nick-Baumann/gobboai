@@ -18,6 +18,7 @@ export {
   createWaSocket,
   formatError,
   getStatusCode,
+  logoutWeb,
   logWebSelfId,
   pickProvider,
   WA_WEB_AUTH_DIR,
