@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 — Unreleased
+
+### Changes
+- Placeholder for upcoming patch fixes.
+
 ## 1.1.0 — 2025-11-26
 
 ### Changes
