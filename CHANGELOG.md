@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — Unreleased
+## 1.2.0 — 2025-11-27
 
 ### Changes
 - **Heartbeat UX:** Default heartbeat interval is now 10 minutes for command mode. Heartbeat prompt is `HEARTBEAT ultrathink`; replies of exactly `HEARTBEAT_OK` suppress outbound messages but still log. Fallback heartbeats no longer start fresh sessions when none exist, and skipped heartbeats do not refresh session `updatedAt` (so idle expiry still works). Session-level `heartbeatIdleMinutes` is supported.
