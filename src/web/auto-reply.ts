@@ -81,8 +81,17 @@ export async function runWebHeartbeatOnce(opts: {
   runtime?: RuntimeEnv;
   sender?: typeof sendMessageWeb;
   sessionId?: string;
+  overrideBody?: string;
+  dryRun?: boolean;
 }) {
-  const { cfg: cfgOverride, to, verbose = false, sessionId } = opts;
+  const {
+    cfg: cfgOverride,
+    to,
+    verbose = false,
+    sessionId,
+    overrideBody,
+    dryRun = false,
+  } = opts;
   const _runtime = opts.runtime ?? defaultRuntime;
   const replyResolver = opts.replyResolver ?? getReplyFromConfig;
   const sender = opts.sender ?? sendMessageWeb;
@@ -118,7 +127,38 @@ export async function runWebHeartbeatOnce(opts: {
     );
   }
 
+  if (overrideBody && overrideBody.trim().length === 0) {
+    throw new Error("Override body must be non-empty when provided.");
+  }
+
   try {
+    if (overrideBody) {
+      if (dryRun) {
+        console.log(
+          success(
+            `[dry-run] web send -> ${to}: ${overrideBody.trim()} (manual message)`,
+          ),
+        );
+        return;
+      }
+      const sendResult = await sender(to, overrideBody, { verbose });
+      heartbeatLogger.info(
+        {
+          to,
+          messageId: sendResult.messageId,
+          chars: overrideBody.length,
+          reason: "manual-message",
+        },
+        "manual heartbeat message sent",
+      );
+      console.log(
+        success(
+          `sent manual message to ${to} (web), id ${sendResult.messageId}`,
+        ),
+      );
+      return;
+    }
+
     const replyResult = await replyResolver(
       {
         Body: HEARTBEAT_PROMPT,
@@ -177,6 +217,17 @@ export async function runWebHeartbeatOnce(opts: {
     }
 
     const finalText = stripped.text || replyResult.text || "";
+    if (dryRun) {
+      heartbeatLogger.info(
+        { to, reason: "dry-run", chars: finalText.length },
+        "heartbeat dry-run",
+      );
+      console.log(
+        success(`[dry-run] heartbeat -> ${to}: ${finalText.slice(0, 200)}`),
+      );
+      return;
+    }
+
     const sendResult = await sender(to, finalText, { verbose });
     heartbeatLogger.info(
       { to, messageId: sendResult.messageId, chars: finalText.length },

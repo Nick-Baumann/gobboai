@@ -17,6 +17,7 @@ import {
   type WebMonitorTuning,
 } from "../provider-web.js";
 import { defaultRuntime } from "../runtime.js";
+import { runTwilioHeartbeatOnce } from "../twilio/heartbeat.js";
 import type { Provider } from "../utils.js";
 import { VERSION } from "../version.js";
 import {
@@ -179,8 +180,10 @@ Examples:
 
   program
     .command("heartbeat")
-    .description("Trigger a heartbeat poll once (web provider, no tmux)")
-    .option("--provider <provider>", "auto | web", "auto")
+    .description(
+      "Trigger a heartbeat or manual send once (web or twilio, no tmux)",
+    )
+    .option("--provider <provider>", "auto | web | twilio", "auto")
     .option("--to <number>", "Override target E.164; defaults to allowFrom[0]")
     .option(
       "--session-id <id>",
@@ -191,6 +194,12 @@ Examples:
       "Send heartbeat to all active sessions (or allowFrom entries when none)",
       false,
     )
+    .option(
+      "--message <text>",
+      "Send a custom message instead of the heartbeat probe (web or twilio provider)",
+    )
+    .option("--body <text>", "Alias for --message")
+    .option("--dry-run", "Print the resolved payload without sending", false)
     .option("--verbose", "Verbose logging", false)
     .addHelpText(
       "after",
@@ -200,6 +209,7 @@ Examples:
   warelay heartbeat --verbose       # prints detailed heartbeat logs
   warelay heartbeat --to +1555123   # override destination
   warelay heartbeat --session-id <uuid> --to +1555123   # resume a specific session
+  warelay heartbeat --message "Ping" --provider twilio
   warelay heartbeat --all           # send to every active session recipient or allowFrom entry`,
     )
     .action(async (opts) => {
@@ -233,27 +243,43 @@ Examples:
         defaultRuntime.exit(1);
       }
       const providerPref = String(opts.provider ?? "auto");
-      if (!["auto", "web"].includes(providerPref)) {
-        defaultRuntime.error("--provider must be auto or web");
+      if (!["auto", "web", "twilio"].includes(providerPref)) {
+        defaultRuntime.error("--provider must be auto, web, or twilio");
         defaultRuntime.exit(1);
       }
-      const provider = await pickProvider(providerPref as "auto" | "web");
-      if (provider !== "web") {
-        defaultRuntime.error(
-          danger(
-            "Heartbeat is only supported for the web provider. Link with `warelay login --verbose`.",
-          ),
-        );
-        defaultRuntime.exit(1);
-      }
+
+      const overrideBody =
+        (opts.message as string | undefined) ||
+        (opts.body as string | undefined) ||
+        undefined;
+      const dryRun = Boolean(opts.dryRun);
+
+      const provider =
+        providerPref === "twilio"
+          ? "twilio"
+          : await pickProvider(providerPref as "auto" | "web");
+      if (provider === "twilio") ensureTwilioEnv();
+
       try {
         for (const to of recipients) {
-          await runWebHeartbeatOnce({
-            to,
-            verbose: Boolean(opts.verbose),
-            runtime: defaultRuntime,
-            sessionId: opts.sessionId,
-          });
+          if (provider === "web") {
+            await runWebHeartbeatOnce({
+              to,
+              verbose: Boolean(opts.verbose),
+              runtime: defaultRuntime,
+              sessionId: opts.sessionId,
+              overrideBody,
+              dryRun,
+            });
+          } else {
+            await runTwilioHeartbeatOnce({
+              to,
+              verbose: Boolean(opts.verbose),
+              runtime: defaultRuntime,
+              overrideBody,
+              dryRun,
+            });
+          }
         }
       } catch {
         defaultRuntime.exit(1);
