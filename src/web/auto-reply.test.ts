@@ -351,6 +351,45 @@ describe("runWebHeartbeatOnce", () => {
     expect(stored["+1999"]?.sessionId).toBe(sessionId);
     expect(stored["+1999"]?.updatedAt).toBeDefined();
   });
+
+  it("sends overrideBody directly and skips resolver", async () => {
+    const sender: typeof sendMessageWeb = vi
+      .fn()
+      .mockResolvedValue({ messageId: "m1", toJid: "jid" });
+    const resolver = vi.fn();
+    setLoadConfigMock({
+      inbound: { allowFrom: ["+1555"], reply: { mode: "command" } },
+    });
+    await runWebHeartbeatOnce({
+      to: "+1555",
+      verbose: false,
+      sender,
+      replyResolver: resolver,
+      overrideBody: "manual ping",
+    });
+    expect(sender).toHaveBeenCalledWith("+1555", "manual ping", {
+      verbose: false,
+    });
+    expect(resolver).not.toHaveBeenCalled();
+  });
+
+  it("dry-run overrideBody prints and skips send", async () => {
+    const sender: typeof sendMessageWeb = vi.fn();
+    const resolver = vi.fn();
+    setLoadConfigMock({
+      inbound: { allowFrom: ["+1555"], reply: { mode: "command" } },
+    });
+    await runWebHeartbeatOnce({
+      to: "+1555",
+      verbose: false,
+      sender,
+      replyResolver: resolver,
+      overrideBody: "dry",
+      dryRun: true,
+    });
+    expect(sender).not.toHaveBeenCalled();
+    expect(resolver).not.toHaveBeenCalled();
+  });
 });
 
 describe("web auto-reply", () => {
