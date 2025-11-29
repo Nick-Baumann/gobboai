@@ -594,6 +594,15 @@ export async function monitorWebProvider(
           );
           return;
         }
+        // Apply same-phone response prefix if configured and in same-phone mode
+        const samePhoneResponsePrefix = cfg.inbound?.samePhoneResponsePrefix;
+        if (isSamePhoneMode && samePhoneResponsePrefix && replyResult.text) {
+          // Only add prefix if not already present
+          if (!replyResult.text.startsWith(samePhoneResponsePrefix)) {
+            replyResult.text = `${samePhoneResponsePrefix} ${replyResult.text}`;
+          }
+        }
+
         try {
           await deliverWebReply({
             replyResult,
