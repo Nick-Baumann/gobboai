@@ -270,6 +270,51 @@ describe("web monitor inbox", () => {
     await listener.close();
   });
 
+  it("unwraps ephemeral messages, preserves mentions, and still delivers group pings", async () => {
+    const onMessage = vi.fn();
+    const listener = await monitorWebInbox({ verbose: false, onMessage });
+    const sock = await createWaSocket();
+    const upsert = {
+      type: "notify",
+      messages: [
+        {
+          key: {
+            id: "grp-ephem",
+            fromMe: false,
+            remoteJid: "424242@g.us",
+            participant: "888@s.whatsapp.net",
+          },
+          message: {
+            ephemeralMessage: {
+              message: {
+                extendedTextMessage: {
+                  text: "oh hey @Clawd UK !",
+                  contextInfo: { mentionedJid: ["123@s.whatsapp.net"] },
+                },
+              },
+            },
+          },
+        },
+      ],
+    };
+
+    sock.ev.emit("messages.upsert", upsert);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(onMessage).toHaveBeenCalledTimes(1);
+    expect(onMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatType: "group",
+        conversationId: "424242@g.us",
+        body: "oh hey @Clawd UK !",
+        mentionedJids: ["123@s.whatsapp.net"],
+        senderE164: "+888",
+      }),
+    );
+
+    await listener.close();
+  });
+
   it("still forwards group messages (with sender info) even when allowFrom is restrictive", async () => {
     mockLoadConfig.mockReturnValue({
       inbound: {
