@@ -19,6 +19,8 @@
 - Web auto-replies fall back to caption-only if media send fails; hosted media MIME-sniffed and cleaned up immediately.
 - IPC relay send shows typing indicator; batched inbound messages keep timestamps; watchdog restarts WhatsApp after long inactivity.
 - Early `allowFrom` filtering prevents decryption errors; same-phone mode supported with echo suppression.
+- All console output is now mirrored into pino logs (still printed to stdout/stderr), so verbose runs keep full traces.
+- `--verbose` now forces log level `trace` (was `debug`) to capture every event.
 
 ### Security / Hardening
 - IPC socket hardened (0700 dir / 0600 socket, no symlinks/foreign owners); `warelay logout` also prunes session store.
