@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import util from "node:util";
 
 import pino, { type Bindings, type LevelWithSilent, type Logger } from "pino";
 import { loadConfig, type WarelayConfig } from "./config/config.js";
@@ -37,9 +38,10 @@ export type LoggerResolvedSettings = ResolvedSettings;
 let cachedLogger: Logger | null = null;
 let cachedSettings: ResolvedSettings | null = null;
 let overrideSettings: LoggerSettings | null = null;
+let consolePatched = false;
 
 function normalizeLevel(level?: string): LevelWithSilent {
-  if (isVerbose()) return "debug";
+  if (isVerbose()) return "trace";
   const candidate = level ?? "info";
   return ALLOWED_LEVELS.includes(candidate as LevelWithSilent)
     ? (candidate as LevelWithSilent)
@@ -111,6 +113,58 @@ export function resetLogger() {
   cachedLogger = null;
   cachedSettings = null;
   overrideSettings = null;
+}
+
+/**
+ * Route console.* calls through pino while still emitting to stdout/stderr.
+ * This keeps user-facing output unchanged but guarantees every console call is captured in log files.
+ */
+export function enableConsoleCapture(): void {
+  if (consolePatched) return;
+  consolePatched = true;
+
+  const logger = getLogger();
+
+  const original = {
+    log: console.log,
+    info: console.info,
+    warn: console.warn,
+    error: console.error,
+    debug: console.debug,
+    trace: console.trace,
+  };
+
+  const forward =
+    (level: LevelWithSilent, orig: (...args: unknown[]) => void) =>
+    (...args: unknown[]) => {
+      const formatted = util.format(...args);
+      try {
+        // Map console levels to pino
+        if (level === "trace") {
+          logger.trace(formatted);
+        } else if (level === "debug") {
+          logger.debug(formatted);
+        } else if (level === "info") {
+          logger.info(formatted);
+        } else if (level === "warn") {
+          logger.warn(formatted);
+        } else if (level === "error" || level === "fatal") {
+          logger.error(formatted);
+        } else {
+          logger.info(formatted);
+        }
+      } catch {
+        // never block console output on logging failures
+      }
+      orig.apply(console, args as []);
+    };
+
+  console.log = forward("info", original.log);
+  console.info = forward("info", original.info);
+  console.warn = forward("warn", original.warn);
+  console.error = forward("error", original.error);
+  console.debug = forward("debug", original.debug);
+  console.trace = forward("trace", original.trace);
 }
 
 function defaultRollingPathForToday(): string {
