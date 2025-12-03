@@ -7,6 +7,7 @@ import {
   autoReplyIfConfigured,
   getReplyFromConfig,
 } from "./auto-reply/reply.js";
+import { enableConsoleCapture } from "./logging.js";
 import { applyTemplate } from "./auto-reply/templating.js";
 import { createDefaultDeps, monitorTwilio } from "./cli/deps.js";
 import { promptYesNo } from "./cli/prompt.js";
@@ -55,6 +56,9 @@ import { startWebhook as startWebhookImpl } from "./twilio/webhook.js";
 import { assertProvider, normalizeE164, toWhatsappJid } from "./utils.js";
 
 dotenv.config({ quiet: true });
+
+// Capture all console output into pino logs while keeping stdout/stderr behavior.
+enableConsoleCapture();
 
 import { buildProgram } from "./cli/program.js";
 
