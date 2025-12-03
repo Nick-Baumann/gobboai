@@ -167,6 +167,7 @@ warelay supports running on the same phone number you message from—you chat wi
 - Directive-only message sets a session-level verbose flag (`Verbose logging enabled./disabled.`); invalid levels reply with a hint and don’t change state.
 - Inline directive applies only to that message; resolution: inline > session default > `inbound.reply.verboseDefault` (config) > off.
 - When verbose is on **and the agent emits structured tool results (Pi/Tau and other JSON-emitting agents)**, tool results are sent back as separate messages prefixed with `🛠️`.
+- Starting a new session while verbose is on adds a first reply like `🧭 New session: <id>` so you can correlate runs.
 
 ### Logging (optional)
 - File logs are written to `/tmp/warelay/warelay-YYYY-MM-DD.log` by default (rotated daily; files older than 24h are pruned). Levels: `silent | fatal | error | warn | info | debug | trace` (CLI `--verbose` forces `debug`). Web-provider inbound/outbound entries include message bodies and auto-reply text for easier auditing.
