@@ -463,26 +463,26 @@ enum CritterIconRenderer {
         let h = size.height
 
         let bodyW = w * 0.78
-        let bodyH = h * 0.56
+        let bodyH = h * 0.58
         let bodyX = (w - bodyW) / 2
-        let bodyY = h * 0.22
+        let bodyY = h * 0.36
         let bodyCorner = w * 0.09
 
         let earW = w * 0.22
-        let earH = bodyH * 0.74
+        let earH = bodyH * 0.66
         let earCorner = earW * 0.24
 
-        let legW = w * 0.12
-        let legH = h * 0.24
-        let legSpacing = w * 0.08
+        let legW = w * 0.11
+        let legH = h * 0.26
+        let legSpacing = w * 0.085
         let legsWidth = 4 * legW + 3 * legSpacing
         let legStartX = (w - legsWidth) / 2
-        let legY = bodyY + bodyH - legH * 0.05
+        let legY = bodyY - legH + h * 0.05
 
         let eyeOpen = max(0.05, 1 - blink)
         let eyeW = bodyW * 0.2
         let eyeH = bodyH * 0.26 * eyeOpen
-        let eyeY = bodyY + bodyH * 0.55
+        let eyeY = bodyY + bodyH * 0.56
         let eyeOffset = bodyW * 0.24
 
         ctx.setFillColor(NSColor.labelColor.cgColor)
