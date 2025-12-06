@@ -34,6 +34,7 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/Clawdis.icns"),
+                .copy("Resources/WebChat"),
             ],
             swiftSettings: [
                 .enableUpcomingFeature("StrictConcurrency"),

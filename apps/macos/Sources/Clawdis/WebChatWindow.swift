@@ -55,33 +55,42 @@ final class WebChatWindowController: NSWindowController, WKScriptMessageHandler 
     required init?(coder: NSCoder) { fatalError() }
 
     private func loadPage() {
-        let monoRoot = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Projects/pi-mono")
-        let webUiDist = monoRoot.appendingPathComponent("packages/web-ui/dist")
-        let piAiDist = monoRoot.appendingPathComponent("packages/ai/dist/index.js")
-        let miniLitDist = monoRoot.appendingPathComponent("packages/web-ui/node_modules/@mariozechner/mini-lit/dist/index.js")
-        let litDist = monoRoot.appendingPathComponent("packages/web-ui/node_modules/lit/index.js")
-        let lucideDist = monoRoot.appendingPathComponent("node_modules/lucide/dist/esm/lucide.js")
+        guard let webChatURL = Bundle.main.url(forResource: "WebChat", withExtension: nil) else {
+            NSLog("WebChat resources missing")
+            return
+        }
 
-        let distPath = webUiDist.path(percentEncoded: false)
-        let cssPath = webUiDist.appendingPathComponent("app.css").path(percentEncoded: false)
+        let distPath = webChatURL.path(percentEncoded: false)
+        let cssPath = webChatURL.appendingPathComponent("app.css").path(percentEncoded: false)
+        let vendor = webChatURL.appendingPathComponent("vendor")
+
+        let piAi = vendor.appendingPathComponent("pi-ai/index.js").path(percentEncoded: false)
+        let miniLit = vendor.appendingPathComponent("mini-lit/index.js").path(percentEncoded: false)
+        let lit = vendor.appendingPathComponent("lit/index.js").path(percentEncoded: false)
+        let lucide = vendor.appendingPathComponent("lucide/lucide.js").path(percentEncoded: false)
+        let pdfjs = vendor.appendingPathComponent("pdfjs-dist/build/pdf.js").path(percentEncoded: false)
+        let pdfWorker = vendor.appendingPathComponent("pdfjs-dist/build/pdf.worker.min.mjs").path(percentEncoded: false)
 
         let importMap = [
             "imports": [
                 "@mariozechner/pi-web-ui": "file://\(distPath)/index.js",
-                "@mariozechner/pi-ai": "file://\(piAiDist.path(percentEncoded: false))",
-                "@mariozechner/mini-lit": "file://\(miniLitDist.path(percentEncoded: false))",
-                "lit": "file://\(litDist.path(percentEncoded: false))",
-                "lucide": "file://\(lucideDist.path(percentEncoded: false))"
-            ]
+                "@mariozechner/pi-ai": "file://\(piAi)",
+                "@mariozechner/mini-lit": "file://\(miniLit)",
+                "lit": "file://\(lit)",
+                "lucide": "file://\(lucide)",
+                "pdfjs-dist": "file://\(pdfjs)",
+                "pdfjs-dist/build/pdf.worker.min.mjs": "file://\(pdfWorker)",
+            ],
         ]
 
-        let importMapJSON: String
-        if let data = try? JSONSerialization.data(withJSONObject: importMap, options: [.prettyPrinted]),
-           let json = String(data: data, encoding: .utf8) {
-            importMapJSON = json
+        let importMapJSON: String = if let data = try? JSONSerialization.data(
+            withJSONObject: importMap,
+            options: [.prettyPrinted]),
+            let json = String(data: data, encoding: .utf8)
+        {
+            json
         } else {
-            importMapJSON = "{}"
+            "{}"
         }
 
         let html = """
@@ -161,7 +170,7 @@ final class WebChatWindowController: NSWindowController, WKScriptMessageHandler 
         </body>
         </html>
         """
-        self.webView.loadHTMLString(html, baseURL: URL(string: distPath))
+        self.webView.loadHTMLString(html, baseURL: webChatURL)
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
