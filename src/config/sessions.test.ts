@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveSessionKey } from "./sessions.js";
+import { deriveSessionKey, resolveSessionKey } from "./sessions.js";
 
 describe("sessions", () => {
   it("returns normalized per-sender key", () => {
@@ -21,5 +21,17 @@ describe("sessions", () => {
     expect(deriveSessionKey("per-sender", { From: "12345-678@g.us" })).toBe(
       "group:12345-678@g.us",
     );
+  });
+
+  it("maps direct chats to main key when provided", () => {
+    expect(
+      resolveSessionKey("per-sender", { From: "whatsapp:+1555" }, "main"),
+    ).toBe("main");
+  });
+
+  it("leaves groups untouched even with main key", () => {
+    expect(
+      resolveSessionKey("per-sender", { From: "12345-678@g.us" }, "main"),
+    ).toBe("group:12345-678@g.us");
   });
 });
