@@ -61,7 +61,7 @@ private struct MenuContent: View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle(isOn: self.activeBinding) { Text("Clawdis Active") }
             self.statusRow
-            Toggle(isOn: self.heartbeatsBinding) { Text("Send heartbeats") }
+            Toggle(isOn: self.heartbeatsBinding) { Text("Send Heartbeats") }
             Toggle(isOn: self.voiceWakeBinding) { Text("Voice Wake") }
                 .disabled(!voiceWakeSupported)
                 .opacity(voiceWakeSupported ? 1 : 0.5)
