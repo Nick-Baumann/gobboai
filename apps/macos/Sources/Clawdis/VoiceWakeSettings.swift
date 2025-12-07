@@ -69,7 +69,6 @@ actor MicLevelMonitor {
     }
 }
 
-@MainActor
 final class VoiceWakeTester {
     private let recognizer: SFSpeechRecognizer?
     private let audioEngine = AVAudioEngine()
