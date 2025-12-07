@@ -26,4 +26,5 @@ let voiceWakeSupported: Bool = ProcessInfo.processInfo.operatingSystemVersion.ma
 let cliHelperSearchPaths = ["/usr/local/bin", "/opt/homebrew/bin"]
 let defaultVoiceWakeForwardCommand = "clawdis-mac agent --message \"${text}\" --thinking low"
 let defaultVoiceWakeForwardPort = 22
-let defaultVoiceWakeForwardTimeout: TimeInterval = 6
+// Allow enough time for remote agent responses (LLM replies often take >10s).
+let defaultVoiceWakeForwardTimeout: TimeInterval = 30

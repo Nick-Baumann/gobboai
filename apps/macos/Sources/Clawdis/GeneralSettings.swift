@@ -200,7 +200,7 @@ struct GeneralSettings: View {
                 .disabled(self.healthStore.isRefreshing)
 
                 Button {
-                    NSWorkspace.shared.selectFile("/tmp/clawdis/clawdis.log", inFileViewerRootedAtPath: "/tmp/clawdis/")
+                    self.revealLogs()
                 } label: {
                     Label("Reveal Logs", systemImage: "doc.text.magnifyingglass")
                 }
@@ -209,6 +209,23 @@ struct GeneralSettings: View {
         .padding(12)
         .background(Color.gray.opacity(0.08))
         .cornerRadius(10)
+    }
+}
+
+private extension GeneralSettings {
+    func revealLogs() {
+        let path = URL(fileURLWithPath: "/tmp/clawdis/clawdis.log")
+        if FileManager.default.fileExists(atPath: path.path) {
+            NSWorkspace.shared.selectFile(path.path, inFileViewerRootedAtPath: path.deletingLastPathComponent().path)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Log file not found"
+        alert.informativeText = "Expected log at \(path.path). Run a health check or generate activity first."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 }
 
