@@ -1,0 +1,33 @@
+# Clawdis macOS XPC architecture (Dec 2025)
+
+## Goals
+- Single GUI app instance that owns all TCC-facing work (notifications, screen recording, mic, speech, AppleScript).
+- A small surface for automation: the `clawdis-mac` CLI and the Node relay talk to the app via a local XPC channel.
+- Predictable permissions: always the same signed bundle ID, launched by launchd, so TCC grants stick.
+- Limit who can connect: only signed clients from our team (with a same-UID fallback for development).
+
+## How it works
+- The app registers a Mach service named `com.steipete.clawdis.xpc` via a user LaunchAgent at `~/Library/LaunchAgents/com.steipete.clawdis.plist`.
+- The launch agent runs `dist/Clawdis.app/Contents/MacOS/Clawdis` with `RunAtLoad=true`, `KeepAlive=false`, and a `MachServices` entry for the XPC name.
+- The app hosts the XPC listener (`NSXPCListener(machServiceName:)`) and exports `ClawdisXPCService`.
+- The CLI (`clawdis-mac`) connects with `NSXPCConnection(machServiceName:)`; the Node relay shells out to the CLI.
+- Security: on incoming connections we read the audit token (or PID) and allow only:
+  - Code-signed clients with team ID `Y5PE65HELJ`; or
+  - Same-UID processes (fallback to avoid blocking local dev).
+
+## Operational flows
+- Restart/rebuild: `SIGN_IDENTITY="Apple Development: Peter Steinberger (2ZAC4GM7GD)" scripts/restart-mac.sh`
+  - Kills existing instances
+  - Swift build + package
+  - Writes/bootstraps/kickstarts the LaunchAgent
+- CLI version: `clawdis-mac --version` (pulled from `package.json` during packaging)
+- Single instance: app exits early if another instance with the same bundle ID is running.
+
+## Why launchd (not anonymous endpoints)
+- A Mach service avoids brittle endpoint handoffs and lets the CLI/Node connect even if the app was started by launchd.
+- RunAtLoad without KeepAlive means the app starts once; if it crashes it stays down (no unwanted respawn), but CLI calls will re-spawn via launchd.
+
+## Hardening notes
+- Audit-token check currently allows same-UID fallback; to lock down further, remove that fallback and require the team ID match.
+- All communication remains local-only; no network sockets are exposed.
+- TCC prompts originate only from the GUI app bundle; run scripts/package-mac-app.sh so the signed bundle ID stays stable.
