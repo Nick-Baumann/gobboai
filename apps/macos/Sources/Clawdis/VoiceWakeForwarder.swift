@@ -12,6 +12,20 @@ struct VoiceWakeForwardConfig: Sendable {
 enum VoiceWakeForwarder {
     private static let logger = Logger(subsystem: "com.steipete.clawdis", category: "voicewake.forward")
 
+    enum VoiceWakeForwardError: LocalizedError, Equatable {
+        case invalidTarget
+        case launchFailed(String)
+        case nonZeroExit(Int32)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidTarget: "Missing or invalid SSH target"
+            case let .launchFailed(message): "ssh failed to start: \(message)"
+            case let .nonZeroExit(code): "ssh exited with code \(code)"
+            }
+        }
+    }
+
     static func forward(transcript: String, config: VoiceWakeForwardConfig) async {
         guard config.enabled else { return }
         let destination = config.target.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -58,6 +72,42 @@ enum VoiceWakeForwarder {
         try? input.fileHandleForWriting.close()
 
         await self.wait(process, timeout: config.timeout)
+    }
+
+    static func checkConnection(config: VoiceWakeForwardConfig) async -> Result<Void, VoiceWakeForwardError> {
+        let destination = config.target.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsed = self.parse(target: destination) else {
+            return .failure(.invalidTarget)
+        }
+
+        let userHost = parsed.user.map { "\($0)@\(parsed.host)" } ?? parsed.host
+
+        var args: [String] = [
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "ConnectTimeout=4",
+        ]
+        if parsed.port > 0 { args.append(contentsOf: ["-p", String(parsed.port)]) }
+        if !config.identityPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            args.append(contentsOf: ["-i", config.identityPath])
+        }
+        args.append(contentsOf: [userHost, "true"])
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        process.arguments = args
+
+        do {
+            try process.run()
+        } catch {
+            return .failure(.launchFailed(error.localizedDescription))
+        }
+
+        await self.wait(process, timeout: 6)
+        if process.terminationStatus == 0 {
+            return .success(())
+        }
+        return .failure(.nonZeroExit(process.terminationStatus))
     }
 
     static func renderedCommand(template: String, transcript: String) -> String {
