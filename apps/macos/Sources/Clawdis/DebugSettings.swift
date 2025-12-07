@@ -108,6 +108,7 @@ struct DebugSettings: View {
             HStack {
                 Button("Restart app") { self.relaunch() }
                 Button("Reveal app in Finder") { self.revealApp() }
+                Button("Restart relay") { self.restartRelay() }
             }
             .buttonStyle(.bordered)
             Spacer()
@@ -140,6 +141,14 @@ struct DebugSettings: View {
             return
         }
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    private func restartRelay() {
+        Task { @MainActor in
+            self.relayManager.stop()
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            self.relayManager.setActive(true)
+        }
     }
 
     private func chooseCatalogFile() {
