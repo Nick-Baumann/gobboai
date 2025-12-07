@@ -29,4 +29,11 @@ import Testing
         let command = VoiceWakeForwarder.renderedCommand(template: template, transcript: "ignored")
         #expect(command == template)
     }
+
+    @Test func commandPrefersCliInstallPaths() {
+        let command = VoiceWakeForwarder.commandWithCliPath("clawdis-mac status")
+        let prefix = "PATH=\(cliHelperSearchPaths.joined(separator: ":")):$PATH; "
+        #expect(command.hasPrefix(prefix))
+        #expect(command.contains("clawdis-mac status"))
+    }
 }

@@ -97,7 +97,7 @@ enum CLIInstaller {
             return
         }
 
-        let targets = ["/usr/local/bin/clawdis-mac", "/opt/homebrew/bin/clawdis-mac"]
+        let targets = cliHelperSearchPaths.map { "\($0)/clawdis-mac" }
         let result = await self.privilegedSymlink(source: helper.path, targets: targets)
         await statusHandler(result)
     }

@@ -11,6 +11,11 @@ struct VoiceWakeForwardConfig: Sendable {
 
 enum VoiceWakeForwarder {
     private static let logger = Logger(subsystem: "com.steipete.clawdis", category: "voicewake.forward")
+    private static let cliPathPrefix = "PATH=\(cliHelperSearchPaths.joined(separator: ":")):$PATH"
+
+    static func commandWithCliPath(_ command: String) -> String {
+        "\(self.cliPathPrefix); \(command)"
+    }
 
     enum VoiceWakeForwardError: LocalizedError, Equatable {
         case invalidTarget
@@ -57,7 +62,7 @@ enum VoiceWakeForwarder {
         args.append(userHost)
 
         let rendered = self.renderedCommand(template: config.commandTemplate, transcript: transcript)
-        args.append(contentsOf: ["sh", "-c", rendered])
+        args.append(contentsOf: ["sh", "-c", self.commandWithCliPath(rendered)])
 
         self.logger.info("voice wake forward starting host=\(userHost, privacy: .public)")
 
@@ -134,7 +139,8 @@ enum VoiceWakeForwarder {
 
         // Stage 2: ensure remote clawdis-mac is present and responsive.
         var checkArgs = baseArgs
-        checkArgs.append(contentsOf: [userHost, "clawdis-mac", "status"])
+        let statusCommand = self.commandWithCliPath("clawdis-mac status")
+        checkArgs.append(contentsOf: [userHost, "sh", "-c", statusCommand])
         let checkProc = Process()
         checkProc.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
         checkProc.arguments = checkArgs
