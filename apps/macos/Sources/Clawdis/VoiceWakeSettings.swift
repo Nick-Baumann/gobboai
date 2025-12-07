@@ -11,6 +11,13 @@ enum VoiceWakeTestState: Equatable {
     case failed(String)
 }
 
+private enum ForwardStatus: Equatable {
+    case idle
+    case checking
+    case ok
+    case failed(String)
+}
+
 private struct AudioInputDevice: Identifiable, Equatable {
     let uid: String
     let name: String
@@ -253,6 +260,7 @@ struct VoiceWakeSettings: View {
     private let meter = MicLevelMonitor()
     @State private var availableLocales: [Locale] = []
     @State private var showForwardAdvanced = false
+    @State private var forwardStatus: ForwardStatus = .idle
 
     private struct IndexedWord: Identifiable {
         let id: Int
@@ -686,7 +694,10 @@ struct VoiceWakeSettings: View {
                         TextField("steipete@peters-mac-studio-1", text: self.$state.voiceWakeForwardTarget)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 280)
+                            .onChange(of: self.state.voiceWakeForwardTarget) { _, _ in self.forwardStatus = .idle }
                     }
+
+                    self.forwardStatusRow
 
                     DisclosureGroup(isExpanded: self.$showForwardAdvanced) {
                         VStack(alignment: .leading, spacing: 10) {
@@ -696,6 +707,9 @@ struct VoiceWakeSettings: View {
                                     text: self.$state.voiceWakeForwardIdentity)
                                     .textFieldStyle(.roundedBorder)
                                     .frame(width: 320)
+                                    .onChange(of: self.state.voiceWakeForwardIdentity) { _, _ in
+                                        self.forwardStatus = .idle
+                                    }
                             }
 
                             VStack(alignment: .leading, spacing: 4) {
@@ -706,6 +720,9 @@ struct VoiceWakeSettings: View {
                                     text: self.$state.voiceWakeForwardCommand,
                                     axis: .vertical)
                                     .textFieldStyle(.roundedBorder)
+                                    .onChange(of: self.state.voiceWakeForwardCommand) { _, _ in
+                                        self.forwardStatus = .idle
+                                    }
                                 Text(
                                     "${text} is replaced with the transcript."
                                         + "\nIt is also piped to stdin if you prefer $(cat).")
@@ -725,9 +742,52 @@ struct VoiceWakeSettings: View {
         }
     }
 
+    private var forwardStatusRow: some View {
+        HStack(spacing: 10) {
+            switch self.forwardStatus {
+            case .idle:
+                Image(systemName: "circle.dashed")
+                    .foregroundStyle(.secondary)
+            case .checking:
+                ProgressView().controlSize(.small)
+            case .ok:
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            case let .failed(message):
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                    .help(message)
+            }
+
+            Button("Check connection") {
+                Task { await self.checkForwardConnection() }
+            }
+            .disabled(self.state.voiceWakeForwardTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+            if case let .failed(message) = self.forwardStatus {
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(5)
+            }
+        }
+    }
+
     private var levelLabel: String {
         let db = (meterLevel * 50) - 50
         return String(format: "%.0f dB", db)
+    }
+
+    private func checkForwardConnection() async {
+        self.forwardStatus = .checking
+        let config = AppStateStore.shared.voiceWakeForwardConfig
+        let result = await VoiceWakeForwarder.checkConnection(config: config)
+        await MainActor.run {
+            switch result {
+            case .success:
+                self.forwardStatus = .ok
+            case let .failure(error):
+                self.forwardStatus = .failed(error.localizedDescription)
+            }
+        }
     }
 
     @MainActor
