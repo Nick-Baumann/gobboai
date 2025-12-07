@@ -1,295 +1,6 @@
 import AVFoundation
-import OSLog
 import Speech
 import SwiftUI
-
-enum VoiceWakeTestState: Equatable {
-    case idle
-    case requesting
-    case listening
-    case hearing(String)
-    case detected(String)
-    case failed(String)
-}
-
-private enum ForwardStatus: Equatable {
-    case idle
-    case checking
-    case ok
-    case failed(String)
-}
-
-private struct AudioInputDevice: Identifiable, Equatable {
-    let uid: String
-    let name: String
-    var id: String { self.uid }
-}
-
-actor MicLevelMonitor {
-    private let engine = AVAudioEngine()
-    private var update: (@Sendable (Double) -> Void)?
-    private var running = false
-    private var smoothedLevel: Double = 0
-
-    func start(onLevel: @Sendable @escaping (Double) -> Void) async throws {
-        self.update = onLevel
-        if self.running { return }
-        let input = self.engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        input.removeTap(onBus: 0)
-        input.installTap(onBus: 0, bufferSize: 512, format: format) { [weak self] buffer, _ in
-            guard let self else { return }
-            let level = Self.normalizedLevel(from: buffer)
-            Task { await self.push(level: level) }
-        }
-        self.engine.prepare()
-        try self.engine.start()
-        self.running = true
-    }
-
-    func stop() {
-        guard self.running else { return }
-        self.engine.inputNode.removeTap(onBus: 0)
-        self.engine.stop()
-        self.running = false
-    }
-
-    private func push(level: Double) {
-        self.smoothedLevel = (self.smoothedLevel * 0.45) + (level * 0.55)
-        guard let update else { return }
-        let value = self.smoothedLevel
-        Task { @MainActor in update(value) }
-    }
-
-    private static func normalizedLevel(from buffer: AVAudioPCMBuffer) -> Double {
-        guard let channel = buffer.floatChannelData?[0] else { return 0 }
-        let frameCount = Int(buffer.frameLength)
-        guard frameCount > 0 else { return 0 }
-        var sum: Float = 0
-        for i in 0..<frameCount {
-            let s = channel[i]
-            sum += s * s
-        }
-        let rms = sqrt(sum / Float(frameCount) + 1e-12)
-        let db = 20 * log10(Double(rms))
-        let normalized = max(0, min(1, (db + 50) / 50))
-        return normalized
-    }
-}
-
-final class VoiceWakeTester {
-    private let recognizer: SFSpeechRecognizer?
-    private let audioEngine = AVAudioEngine()
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var isStopping = false
-    private var detectionStart: Date?
-    private var lastHeard: Date?
-    private var holdingAfterDetect = false
-    private var detectedText: String?
-    private let logger = Logger(subsystem: "com.steipete.clawdis", category: "voicewake")
-
-    init(locale: Locale = .current) {
-        self.recognizer = SFSpeechRecognizer(locale: locale)
-    }
-
-    func start(
-        triggers: [String],
-        micID: String?,
-        localeID: String?,
-        onUpdate: @escaping @Sendable (VoiceWakeTestState) -> Void) async throws
-    {
-        guard self.recognitionTask == nil else { return }
-        self.isStopping = false
-        let chosenLocale = localeID.flatMap { Locale(identifier: $0) } ?? Locale.current
-        let recognizer = SFSpeechRecognizer(locale: chosenLocale)
-        guard let recognizer, recognizer.isAvailable else {
-            throw NSError(
-                domain: "VoiceWakeTester",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Speech recognition unavailable"])
-        }
-
-        guard Self.hasPrivacyStrings else {
-            throw NSError(
-                domain: "VoiceWakeTester",
-                code: 3,
-                userInfo: [
-                    NSLocalizedDescriptionKey: """
-                    Missing mic/speech privacy strings. Rebuild the mac app (scripts/restart-mac.sh) \
-                    to include usage descriptions.
-                    """,
-                ])
-        }
-
-        let granted = try await Self.ensurePermissions()
-        guard granted else {
-            throw NSError(
-                domain: "VoiceWakeTester",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "Microphone or speech permission denied"])
-        }
-
-        self.configureSession(preferredMicID: micID)
-
-        self.recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        self.recognitionRequest?.shouldReportPartialResults = true
-        let request = self.recognitionRequest
-
-        let inputNode = self.audioEngine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak request] buffer, _ in
-            request?.append(buffer)
-        }
-
-        self.audioEngine.prepare()
-        try self.audioEngine.start()
-        DispatchQueue.main.async {
-            onUpdate(.listening)
-        }
-
-        self.detectionStart = Date()
-        self.lastHeard = self.detectionStart
-
-        guard let request = recognitionRequest else { return }
-
-        self.recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self, !self.isStopping else { return }
-            let text = result?.bestTranscription.formattedString ?? ""
-            let matched = Self.matches(text: text, triggers: triggers)
-            let isFinal = result?.isFinal ?? false
-            let errorMessage = error?.localizedDescription
-
-            Task { [weak self] in
-                guard let self, !self.isStopping else { return }
-                await self.handleResult(
-                    matched: matched,
-                    text: text,
-                    isFinal: isFinal,
-                    errorMessage: errorMessage,
-                    onUpdate: onUpdate)
-            }
-        }
-    }
-
-    func stop() {
-        self.isStopping = true
-        self.audioEngine.stop()
-        self.recognitionRequest?.endAudio()
-        self.recognitionTask?.cancel()
-        self.recognitionTask = nil
-        self.recognitionRequest = nil
-        self.audioEngine.inputNode.removeTap(onBus: 0)
-    }
-
-    private func handleResult(
-        matched: Bool,
-        text: String,
-        isFinal: Bool,
-        errorMessage: String?,
-        onUpdate: @escaping @Sendable (VoiceWakeTestState) -> Void) async
-    {
-        if !text.isEmpty {
-            self.lastHeard = Date()
-        }
-        if matched, !text.isEmpty {
-            self.holdingAfterDetect = true
-            self.detectedText = text
-            self.logger.info("voice wake detected; forwarding (len=\(text.count))")
-            await MainActor.run { AppStateStore.shared.triggerVoiceEars() }
-            let config = await MainActor.run { AppStateStore.shared.voiceWakeForwardConfig }
-            Task.detached {
-                await VoiceWakeForwarder.forward(transcript: text, config: config)
-            }
-            Task { @MainActor in onUpdate(.detected(text)) }
-            self.holdUntilSilence(onUpdate: onUpdate)
-            return
-        }
-        if let errorMessage {
-            self.stop()
-            Task { @MainActor in onUpdate(.failed(errorMessage)) }
-            return
-        }
-        if isFinal {
-            self.stop()
-            let state: VoiceWakeTestState = text.isEmpty
-                ? .failed("No speech detected")
-                : .failed("No trigger heard: “\(text)”")
-            Task { @MainActor in onUpdate(state) }
-        } else {
-            let state: VoiceWakeTestState = text.isEmpty ? .listening : .hearing(text)
-            Task { @MainActor in onUpdate(state) }
-        }
-    }
-
-    private func holdUntilSilence(onUpdate: @escaping @Sendable (VoiceWakeTestState) -> Void) {
-        Task { [weak self] in
-            guard let self else { return }
-            let start = self.detectionStart ?? Date()
-            let deadline = start.addingTimeInterval(10)
-            while !self.isStopping {
-                let now = Date()
-                if now >= deadline { break }
-                if let last = self.lastHeard, now.timeIntervalSince(last) >= 1 {
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 250_000_000)
-            }
-            if !self.isStopping {
-                self.stop()
-                if let detectedText {
-                    self.logger.info("voice wake hold finished; len=\(detectedText.count)")
-                    Task { @MainActor in onUpdate(.detected(detectedText)) }
-                }
-            }
-        }
-    }
-
-    private func configureSession(preferredMicID: String?) {
-        _ = preferredMicID
-    }
-
-    private static func matches(text: String, triggers: [String]) -> Bool {
-        let lowered = text.lowercased()
-        return triggers.contains { lowered.contains($0.lowercased()) }
-    }
-
-    private nonisolated static func ensurePermissions() async throws -> Bool {
-        let speechStatus = SFSpeechRecognizer.authorizationStatus()
-        if speechStatus == .notDetermined {
-            let granted = await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { status in
-                    continuation.resume(returning: status == .authorized)
-                }
-            }
-            guard granted else { return false }
-        } else if speechStatus != .authorized {
-            return false
-        }
-
-        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        switch micStatus {
-        case .authorized: return true
-
-        case .notDetermined:
-            return await withCheckedContinuation { continuation in
-                AVCaptureDevice.requestAccess(for: .audio) { granted in
-                    continuation.resume(returning: granted)
-                }
-            }
-
-        default:
-            return false
-        }
-    }
-
-    private static var hasPrivacyStrings: Bool {
-        let speech = Bundle.main.object(forInfoDictionaryKey: "NSSpeechRecognitionUsageDescription") as? String
-        let mic = Bundle.main.object(forInfoDictionaryKey: "NSMicrophoneUsageDescription") as? String
-        return speech?.isEmpty == false && mic?.isEmpty == false
-    }
-}
 
 struct VoiceWakeSettings: View {
     @ObservedObject var state: AppState
@@ -303,9 +14,20 @@ struct VoiceWakeSettings: View {
     private let meter = MicLevelMonitor()
     @State private var availableLocales: [Locale] = []
     @State private var showForwardAdvanced = false
-    @State private var forwardStatus: ForwardStatus = .idle
+    @State private var forwardStatus: VoiceWakeForwardStatus = .idle
     private let fieldLabelWidth: CGFloat = 120
     private let controlWidth: CGFloat = 240
+
+    private struct AudioInputDevice: Identifiable, Equatable {
+        let uid: String
+        let name: String
+        var id: String { self.uid }
+    }
+
+    private struct IndexedWord: Identifiable {
+        let id: Int
+        let value: String
+    }
 
     private var voiceWakeBinding: Binding<Bool> {
         Binding(
@@ -313,11 +35,6 @@ struct VoiceWakeSettings: View {
             set: { newValue in
                 Task { await self.state.setVoiceWakeEnabled(newValue) }
             })
-    }
-
-    private struct IndexedWord: Identifiable {
-        let id: Int
-        let value: String
     }
 
     var body: some View {
@@ -343,55 +60,22 @@ struct VoiceWakeSettings: View {
                 self.micPicker
                 self.levelMeter
 
-                self.forwardSection
+                VoiceWakeForwardSection(
+                    enabled: self.$state.voiceWakeForwardEnabled,
+                    target: self.$state.voiceWakeForwardTarget,
+                    identity: self.$state.voiceWakeForwardIdentity,
+                    command: self.$state.voiceWakeForwardCommand,
+                    showAdvanced: self.$showForwardAdvanced,
+                    status: self.$forwardStatus,
+                    onTest: { Task { await self.checkForwardConnection() } },
+                    onChange: self.forwardConfigChanged)
 
-                self.testCard
+                VoiceWakeTestCard(
+                    testState: self.$testState,
+                    isTesting: self.$isTesting,
+                    onToggle: self.toggleTest)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Trigger words")
-                            .font(.callout.weight(.semibold))
-                        Spacer()
-                        Button {
-                            self.addWord()
-                        } label: {
-                            Label("Add word", systemImage: "plus")
-                        }
-                        .disabled(self.state.swabbleTriggerWords
-                            .contains(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }))
-
-                        Button("Reset defaults") { self.state.swabbleTriggerWords = defaultVoiceWakeTriggers }
-                    }
-
-                    Table(self.indexedWords) {
-                        TableColumn("Word") { row in
-                            TextField("Wake word", text: self.binding(for: row.id))
-                                .textFieldStyle(.roundedBorder)
-                        }
-                        TableColumn("") { row in
-                            Button {
-                                self.removeWord(at: row.id)
-                            } label: {
-                                Image(systemName: "trash")
-                            }
-                            .buttonStyle(.borderless)
-                            .help("Remove trigger word")
-                        }
-                        .width(36)
-                    }
-                    .frame(minHeight: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.secondary.opacity(0.25), lineWidth: 1))
-
-                    Text(
-                        "Clawdis reacts when any trigger appears in a transcription. "
-                            + "Keep them short to avoid false positives.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                self.triggerTable
 
                 Spacer(minLength: 8)
             }
@@ -413,85 +97,51 @@ struct VoiceWakeSettings: View {
         self.state.swabbleTriggerWords.enumerated().map { IndexedWord(id: $0.offset, value: $0.element) }
     }
 
-    private var testCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var triggerTable: some View {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Test Voice Wake")
+                Text("Trigger words")
                     .font(.callout.weight(.semibold))
                 Spacer()
-                Button(action: self.toggleTest) {
-                    Label(
-                        self.isTesting ? "Stop" : "Start test",
-                        systemImage: self.isTesting ? "stop.circle.fill" : "play.circle")
+                Button {
+                    self.addWord()
+                } label: {
+                    Label("Add word", systemImage: "plus")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(self.isTesting ? .red : .accentColor)
+                .disabled(self.state.swabbleTriggerWords
+                    .contains(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }))
+
+                Button("Reset defaults") { self.state.swabbleTriggerWords = defaultVoiceWakeTriggers }
             }
 
-            HStack(spacing: 8) {
-                self.statusIcon
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(self.statusText)
-                        .font(.subheadline)
-                        .frame(maxHeight: 22, alignment: .center)
-                    if case let .detected(text) = testState {
-                        Text("Heard: \(text)")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+            Table(self.indexedWords) {
+                TableColumn("Word") { row in
+                    TextField("Wake word", text: self.binding(for: row.id))
+                        .textFieldStyle(.roundedBorder)
+                }
+                TableColumn("") { row in
+                    Button {
+                        self.removeWord(at: row.id)
+                    } label: {
+                        Image(systemName: "trash")
                     }
+                    .buttonStyle(.borderless)
+                    .help("Remove trigger word")
                 }
-                Spacer()
+                .width(36)
             }
-            .padding(10)
-            .background(.quaternary.opacity(0.2))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .frame(minHeight: 54)
-        }
-        .padding(.vertical, 2)
-    }
+            .frame(minHeight: 180)
+            .clipShape(RoundedRectangle(cornerRadius: 6))
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.secondary.opacity(0.25), lineWidth: 1))
 
-    private var statusIcon: some View {
-        switch self.testState {
-        case .idle:
-            AnyView(Image(systemName: "waveform").foregroundStyle(.secondary))
-
-        case .requesting:
-            AnyView(ProgressView().controlSize(.small))
-
-        case .listening, .hearing:
-            AnyView(
-                Image(systemName: "ear.and.waveform")
-                    .symbolEffect(.pulse)
-                    .foregroundStyle(Color.accentColor))
-
-        case .detected:
-            AnyView(Image(systemName: "checkmark.circle.fill").foregroundStyle(.green))
-
-        case .failed:
-            AnyView(Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow))
-        }
-    }
-
-    private var statusText: String {
-        switch self.testState {
-        case .idle:
-            "Press start, say a trigger word, and wait for detection."
-
-        case .requesting:
-            "Requesting mic & speech permission…"
-
-        case .listening:
-            "Listening… say your trigger word."
-
-        case let .hearing(text):
-            "Heard: \(text)"
-
-        case .detected:
-            "Voice wake detected!"
-
-        case let .failed(reason):
-            reason
+            Text(
+                "Clawdis reacts when any trigger appears in a transcription. "
+                    + "Keep them short to avoid false positives.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -629,7 +279,7 @@ struct VoiceWakeSettings: View {
                                     }
                                 }
                                 .labelsHidden()
-                                    .frame(width: 220)
+                                .frame(width: 220)
 
                             Button {
                                 guard self.state.voiceWakeAdditionalLocaleIDs.indices.contains(idx) else { return }
@@ -746,99 +396,6 @@ struct VoiceWakeSettings: View {
         }
     }
 
-    private var forwardSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Toggle(isOn: self.$state.voiceWakeForwardEnabled) {
-                Text("Forward wake to host (SSH)")
-            }
-            if self.state.voiceWakeForwardEnabled {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 10) {
-                        Text("SSH")
-                            .font(.callout.weight(.semibold))
-                            .frame(width: 40, alignment: .leading)
-                        TextField("steipete@peters-mac-studio-1", text: self.$state.voiceWakeForwardTarget)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: .infinity)
-                            .onChange(of: self.state.voiceWakeForwardTarget) { _, _ in
-                                self.forwardStatus = .idle
-                                VoiceWakeForwarder.clearCliCache()
-                            }
-                        self.forwardStatusIcon
-                            .frame(width: 16, height: 16, alignment: .center)
-                        Button("Test") {
-                            Task { await self.checkForwardConnection() }
-                        }
-                        .disabled(
-                            self.state.voiceWakeForwardTarget
-                                .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    }
-
-                    if case let .failed(message) = self.forwardStatus {
-                        Text(message)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(5)
-                    }
-
-                    DisclosureGroup(isExpanded: self.$showForwardAdvanced) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            LabeledContent("Identity file") {
-                                TextField(
-                                    "/Users/you/.ssh/voicewake_ed25519",
-                                    text: self.$state.voiceWakeForwardIdentity)
-                                    .textFieldStyle(.roundedBorder)
-                                    .frame(width: 320)
-                                    .onChange(of: self.state.voiceWakeForwardIdentity) { _, _ in
-                                        self.forwardStatus = .idle
-                                    }
-                            }
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Remote command template")
-                                    .font(.callout.weight(.semibold))
-                                TextField(
-                                    "clawdis-mac agent --message \"${text}\" --thinking low",
-                                    text: self.$state.voiceWakeForwardCommand,
-                                    axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
-                                    .onChange(of: self.state.voiceWakeForwardCommand) { _, _ in
-                                        self.forwardStatus = .idle
-                                    }
-                                Text(
-                                    "${text} is replaced with the transcript."
-                                        + "\nIt is also piped to stdin if you prefer $(cat).")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                        .padding(.top, 4)
-                    } label: {
-                        Text("Advanced")
-                            .font(.callout.weight(.semibold))
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-    }
-
-    private var forwardStatusIcon: some View {
-        Group {
-            switch self.forwardStatus {
-            case .idle:
-                Image(systemName: "circle.dashed").foregroundStyle(.secondary)
-            case .checking:
-                ProgressView().controlSize(.mini)
-            case .ok:
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            case .failed:
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
-            }
-        }
-    }
-
     private var levelLabel: String {
         let db = (meterLevel * 50) - 50
         return String(format: "%.0f dB", db)
@@ -859,6 +416,11 @@ struct VoiceWakeSettings: View {
         }
     }
 
+    private func forwardConfigChanged() {
+        self.forwardStatus = .idle
+        VoiceWakeForwarder.clearCliCache()
+    }
+
     @MainActor
     private func restartMeter() async {
         self.meterError = nil
@@ -875,32 +437,3 @@ struct VoiceWakeSettings: View {
         }
     }
 }
-
-struct MicLevelBar: View {
-    let level: Double
-    let segments: Int = 12
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<self.segments, id: \.self) { idx in
-                let fill = self.level * Double(self.segments) > Double(idx)
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(fill ? self.segmentColor(for: idx) : Color.gray.opacity(0.35))
-                    .frame(width: 14, height: 10)
-            }
-        }
-        .padding(4)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Color.gray.opacity(0.25), lineWidth: 1))
-    }
-
-    private func segmentColor(for idx: Int) -> Color {
-        let fraction = Double(idx + 1) / Double(self.segments)
-        if fraction < 0.65 { return .green }
-        if fraction < 0.85 { return .yellow }
-        return .red
-    }
-}
-
-extension VoiceWakeTester: @unchecked Sendable {}
