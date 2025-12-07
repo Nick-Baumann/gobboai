@@ -9,6 +9,7 @@ struct GeneralSettings: View {
     @State private var cliInstalled = false
     @State private var cliInstallLocation: String?
     @State private var remoteStatus: RemoteStatus = .idle
+    @State private var showRemoteAdvanced = false
 
 var body: some View {
         ScrollView(.vertical) {
@@ -105,65 +106,80 @@ var body: some View {
             .frame(width: 320)
 
             if self.state.connectionMode == .remote {
-                VStack(alignment: .leading, spacing: 10) {
-                    LabeledContent("SSH target") {
-                        TextField("user@host[:22]", text: self.$state.remoteTarget)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 260)
-                    }
+                self.remoteCard
+            }
+        }
+    }
 
+    private var remoteCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
+                Text("SSH")
+                    .font(.callout.weight(.semibold))
+                    .frame(width: 44, alignment: .leading)
+                TextField("user@host[:22]", text: self.$state.remoteTarget)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 260)
+            }
+
+            DisclosureGroup(isExpanded: self.$showRemoteAdvanced) {
+                VStack(alignment: .leading, spacing: 8) {
                     LabeledContent("Identity file") {
                         TextField("/Users/you/.ssh/id_ed25519", text: self.$state.remoteIdentity)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 260)
                     }
-
                     LabeledContent("Project root") {
                         TextField("/home/you/Projects/clawdis", text: self.$state.remoteProjectRoot)
                             .textFieldStyle(.roundedBorder)
-                            .frame(width: 320)
+                            .frame(width: 260)
                     }
-
-                    HStack(spacing: 10) {
-                        Button {
-                            Task { await self.testRemote() }
-                        } label: {
-                            if self.remoteStatus == .checking {
-                                ProgressView().controlSize(.small)
-                            } else {
-                                Text("Test remote")
-                            }
-                        }
-                        .disabled(self.remoteStatus == .checking || self.state.remoteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        switch self.remoteStatus {
-                        case .idle:
-                            EmptyView()
-                        case .checking:
-                            Text("Checking…").font(.caption).foregroundStyle(.secondary)
-                        case .ok:
-                            Label("Ready", systemImage: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundStyle(.green)
-                        case let .failed(message):
-                            Text(message)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                    }
-
-                    Text("Tip: use Tailscale for stable remote access; we recommend enabling it when you pick a remote Clawdis.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(12)
-                .background(Color.gray.opacity(0.08))
-                .cornerRadius(10)
-                .transition(.opacity)
+                .padding(.top, 4)
+            } label: {
+                Text("Advanced")
+                    .font(.callout.weight(.semibold))
             }
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await self.testRemote() }
+                } label: {
+                    if self.remoteStatus == .checking {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text("Test remote")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(self.remoteStatus == .checking || self.state.remoteTarget.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                switch self.remoteStatus {
+                case .idle:
+                    EmptyView()
+                case .checking:
+                    Text("Checking…").font(.caption).foregroundStyle(.secondary)
+                case .ok:
+                    Label("Ready", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.green)
+                case let .failed(message):
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+
+            Text("Tip: use Tailscale for stable remote access; we recommend enabling it when you pick a remote Clawdis.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .padding(12)
+        .background(Color.gray.opacity(0.08))
+        .cornerRadius(10)
+        .transition(.opacity)
     }
 
     private var cliInstaller: some View {
