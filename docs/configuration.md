@@ -7,7 +7,7 @@ CLAWDIS uses a JSON configuration file at `~/.clawdis/clawdis.json`.
 ```json
 {
   "inbound": {
-    "allowFrom": ["+436769770569"],
+    "allowFrom": ["+15551234567"],
     "reply": {
       "mode": "command",
       "command": ["tau", "{{Body}}"]
@@ -26,7 +26,7 @@ CLAWDIS uses a JSON configuration file at `~/.clawdis/clawdis.json`.
   },
   "inbound": {
     "allowFrom": [
-      "+436769770569",
+      "+15551234567",
       "+447511247203"
     ],
     "groupChat": {
@@ -80,7 +80,7 @@ CLAWDIS uses a JSON configuration file at `~/.clawdis/clawdis.json`.
 Array of E.164 phone numbers allowed to trigger the AI. Use `["*"]` to allow everyone (dangerous!).
 
 ```json
-"allowFrom": ["+436769770569", "+447511247203"]
+"allowFrom": ["+15551234567", "+447511247203"]
 ```
 
 ### `inbound.groupChat`
