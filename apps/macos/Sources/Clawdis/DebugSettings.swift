@@ -149,6 +149,19 @@ struct DebugSettings: View {
                     }
                 }
                 .buttonStyle(.bordered)
+                Button("Open Agent Events") {
+                    let window = NSWindow(
+                        contentRect: NSRect(x: 0, y: 0, width: 620, height: 420),
+                        styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                        backing: .buffered,
+                        defer: false)
+                    window.title = "Agent Events"
+                    window.isReleasedWhenClosed = false
+                    window.contentView = NSHostingView(rootView: AgentEventsWindow())
+                    window.center()
+                    window.makeKeyAndOrderFront(nil)
+                }
+                .buttonStyle(.borderedProminent)
                 VStack(alignment: .leading, spacing: 6) {
                     Button {
                         Task { await self.sendVoiceDebug() }
