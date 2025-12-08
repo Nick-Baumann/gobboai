@@ -97,6 +97,10 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(self.voiceWakeForwardCommand, forKey: voiceWakeForwardCommandKey) }
     }
 
+    @Published var voicePushToTalkEnabled: Bool {
+        didSet { UserDefaults.standard.set(self.voicePushToTalkEnabled, forKey: voicePushToTalkEnabledKey) }
+    }
+
     @Published var isWorking: Bool = false
     @Published var earBoostActive: Bool = false
     @Published var heartbeatsEnabled: Bool {
@@ -157,6 +161,9 @@ final class AppState: ObservableObject {
         self.voiceWakeForwardTarget = UserDefaults.standard
             .string(forKey: voiceWakeForwardTargetKey) ?? legacyTarget
         self.voiceWakeForwardIdentity = UserDefaults.standard.string(forKey: voiceWakeForwardIdentityKey) ?? ""
+
+        self.voicePushToTalkEnabled = UserDefaults.standard
+            .object(forKey: voicePushToTalkEnabledKey) as? Bool ?? false
 
         var storedForwardCommand = UserDefaults.standard
             .string(forKey: voiceWakeForwardCommandKey) ?? defaultVoiceWakeForwardCommand

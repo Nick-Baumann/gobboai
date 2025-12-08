@@ -92,6 +92,12 @@ private struct MenuContent: View {
                 await self.loadMicrophones(force: true)
             }
         }
+        .task {
+            VoicePushToTalkHotkey.shared.setEnabled(voiceWakeSupported && self.state.voicePushToTalkEnabled)
+        }
+        .onChange(of: self.state.voicePushToTalkEnabled) { _, enabled in
+            VoicePushToTalkHotkey.shared.setEnabled(voiceWakeSupported && enabled)
+        }
     }
 
     private func open(tab: SettingsTab) {

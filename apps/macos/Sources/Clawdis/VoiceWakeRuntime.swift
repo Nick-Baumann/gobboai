@@ -288,6 +288,10 @@ actor VoiceWakeRuntime {
         }
     }
 
+    func pauseForPushToTalk() {
+        self.stop()
+    }
+
     private func updateHeardBeyondTrigger(withTrimmed trimmed: String) {
         if !self.heardBeyondTrigger, !trimmed.isEmpty {
             self.heardBeyondTrigger = true
