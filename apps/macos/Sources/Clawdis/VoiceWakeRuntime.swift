@@ -29,7 +29,8 @@ actor VoiceWakeRuntime {
 
     // Tunables
     private let silenceWindow: TimeInterval = 2.0
-    private let captureHardStop: TimeInterval = 5.0
+    // Maximum capture duration from trigger until we force-send, to avoid runaway sessions.
+    private let captureHardStop: TimeInterval = 120.0
     private let debounceAfterSend: TimeInterval = 0.35
 
     struct RuntimeConfig: Equatable {
