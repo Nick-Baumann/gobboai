@@ -190,13 +190,26 @@ final class VoiceWakeOverlayController: ObservableObject {
     private func measuredHeight() -> CGFloat {
         let attributed = self.model.attributed.length > 0 ? self.model.attributed : self.makeAttributed(from: self.model.text)
         let maxWidth = self.width - (self.padding * 2) - self.spacing - self.buttonWidth
-        let rect = attributed.boundingRect(
-            with: CGSize(width: maxWidth, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            context: nil)
-        let contentHeight = ceil(rect.height)
+
+        let textInset = NSSize(width: 2, height: 6)
+        let lineFragmentPadding: CGFloat = 0
+        let containerWidth = max(1, maxWidth - (textInset.width * 2) - (lineFragmentPadding * 2))
+
+        let storage = NSTextStorage(attributedString: attributed)
+        let container = NSTextContainer(containerSize: CGSize(width: containerWidth, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = lineFragmentPadding
+        container.lineBreakMode = .byWordWrapping
+
+        let layout = NSLayoutManager()
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+
+        _ = layout.glyphRange(for: container)
+        let used = layout.usedRect(for: container)
+
+        let contentHeight = ceil(used.height + (textInset.height * 2))
         let total = contentHeight + self.verticalPadding * 2
-        return max(42, min(total, 220))
+        return max(48, min(total, 220))
     }
 
     private func dismissTargetFrame(for frame: NSRect, reason: DismissReason, outcome: SendOutcome) -> NSRect? {
@@ -252,7 +265,7 @@ private struct VoiceWakeOverlayView: View {
                     self.controller.sendNow()
                 })
                 .focused(self.$focused)
-                .frame(minHeight: 32)
+                .frame(minHeight: 32, maxHeight: .infinity)
 
             Button {
                 self.controller.sendNow()
@@ -280,6 +293,7 @@ private struct VoiceWakeOverlayView: View {
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.regularMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .onAppear { self.focused = false }
@@ -312,13 +326,24 @@ private struct TranscriptTextView: NSViewRepresentable {
         textView.isAutomaticQuoteSubstitutionEnabled = false
         textView.isAutomaticTextReplacementEnabled = false
         textView.font = .systemFont(ofSize: 13, weight: .regular)
-        textView.textContainerInset = NSSize(width: 2, height: 6)
         textView.textContainer?.lineBreakMode = .byWordWrapping
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainerInset = NSSize(width: 2, height: 6)
+
+        textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.string = self.text
+
         textView.textStorage?.setAttributedString(self.attributed)
+        textView.typingAttributes = [
+            .foregroundColor: NSColor.labelColor,
+            .font: NSFont.systemFont(ofSize: 13, weight: .regular),
+        ]
         textView.focusRingType = .none
         textView.onSend = { [weak textView] in
             textView?.window?.makeFirstResponder(nil)
@@ -339,16 +364,19 @@ private struct TranscriptTextView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? TranscriptNSTextView else { return }
         let isEditing = scrollView.window?.firstResponder == textView
         if isEditing {
-            if textView.string != self.text {
-                textView.string = self.text
-            }
-        } else {
+            return
+        }
+
+        if !textView.attributedString().isEqual(to: self.attributed) {
+            context.coordinator.isProgrammaticUpdate = true
+            defer { context.coordinator.isProgrammaticUpdate = false }
             textView.textStorage?.setAttributedString(self.attributed)
         }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: TranscriptTextView
+        var isProgrammaticUpdate = false
 
         init(_ parent: TranscriptTextView) { self.parent = parent }
 
@@ -357,7 +385,9 @@ private struct TranscriptTextView: NSViewRepresentable {
         }
 
         func textDidChange(_ notification: Notification) {
+            guard !self.isProgrammaticUpdate else { return }
             guard let view = notification.object as? NSTextView else { return }
+            guard view.window?.firstResponder === view else { return }
             self.parent.text = view.string
         }
     }
