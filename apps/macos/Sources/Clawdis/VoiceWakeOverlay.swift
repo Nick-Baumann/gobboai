@@ -442,7 +442,8 @@ private struct VibrantLabelView: NSViewRepresentable {
     var onTap: () -> Void
 
     func makeNSView(context: Context) -> NSView {
-        let label = NSTextField(labelWithAttributedString: self.attributed)
+        let display = self.attributed.strippingForegroundColor()
+        let label = NSTextField(labelWithAttributedString: display)
         label.isEditable = false
         label.isBordered = false
         label.drawsBackground = false
@@ -471,10 +472,10 @@ private struct VibrantLabelView: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {
         guard let container = nsView as? ClickCatcher,
               let label = container.subviews.first as? NSTextField else { return }
-        label.attributedStringValue = self.attributed
+        label.attributedStringValue = self.attributed.strippingForegroundColor()
     }
 
-    private final class ClickCatcher: NSView {
+private final class ClickCatcher: NSView {
         let onTap: () -> Void
         init(onTap: @escaping () -> Void) {
             self.onTap = onTap
@@ -488,6 +489,14 @@ private struct VibrantLabelView: NSViewRepresentable {
             super.mouseDown(with: event)
             self.onTap()
         }
+    }
+}
+
+private extension NSAttributedString {
+    func strippingForegroundColor() -> NSAttributedString {
+        let mutable = NSMutableAttributedString(attributedString: self)
+        mutable.removeAttribute(.foregroundColor, range: NSRange(location: 0, length: mutable.length))
+        return mutable
     }
 }
 
