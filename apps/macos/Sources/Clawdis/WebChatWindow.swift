@@ -124,7 +124,9 @@ final class WebChatWindowController: NSWindowController, WKScriptMessageHandler,
                 self.loadPage(baseURL: endpoint.appendingPathComponent("webchat/"))
             }
         } catch {
-            webChatLogger.error("webchat bootstrap failed: \(error.localizedDescription, privacy: .public)")
+            let message = error.localizedDescription
+            webChatLogger.error("webchat bootstrap failed: \(message, privacy: .public)")
+            await MainActor.run { self.showError(message) }
         }
     }
 
@@ -151,6 +153,13 @@ final class WebChatWindowController: NSWindowController, WKScriptMessageHandler,
         } else {
             return URL(string: "http://127.0.0.1:\(remotePort)/")!
         }
+    }
+
+    private func showError(_ text: String) {
+        let html = """
+        <html><body style='font-family:-apple-system;padding:24px;color:#c00'>Web chat failed to connect.<br><br>\(text)</body></html>
+        """
+        self.webView.loadHTMLString(html, baseURL: nil)
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
