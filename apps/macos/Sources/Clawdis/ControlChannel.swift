@@ -13,7 +13,7 @@ struct ControlHeartbeatEvent: Codable {
     let reason: String?
 }
 
-struct ControlAgentEvent: Codable {
+struct ControlAgentEvent: Codable, Sendable {
     let runId: String
     let seq: Int
     let stream: String
@@ -21,7 +21,11 @@ struct ControlAgentEvent: Codable {
     let data: [String: AnyCodable]
 }
 
-struct AnyCodable: Codable {
+extension Notification.Name {
+    static let controlAgentEvent = Notification.Name("clawdis.control.agent")
+}
+
+struct AnyCodable: Codable, @unchecked Sendable {
     let value: Any
 
     init(_ value: Any) { self.value = value }
@@ -196,6 +200,24 @@ final class ControlChannel: ObservableObject {
         await self.disconnect()
         self.mode = mode
         try await self.connect()
+
+        NotificationCenter.default.addObserver(
+            forName: .controlAgentEvent,
+            object: nil,
+            queue: .main)
+        { note in
+            if let evt = note.object as? ControlAgentEvent {
+                DispatchQueue.main.async { @MainActor in
+                    let payload = ControlAgentEvent(
+                        runId: evt.runId,
+                        seq: evt.seq,
+                        stream: evt.stream,
+                        ts: evt.ts,
+                        data: evt.data.mapValues { AnyCodable($0.value) })
+                    AgentEventStore.shared.append(payload)
+                }
+            }
+        }
     }
 
     func disconnect() async {
@@ -410,6 +432,7 @@ final class ControlChannel: ObservableObject {
                 if let payloadData = try? JSONSerialization.data(withJSONObject: payload),
                    let agent = try? JSONDecoder().decode(ControlAgentEvent.self, from: payloadData) {
                     self.handleAgentEvent(agent)
+                    NotificationCenter.default.post(name: .controlAgentEvent, object: agent)
                 }
             }
             return
