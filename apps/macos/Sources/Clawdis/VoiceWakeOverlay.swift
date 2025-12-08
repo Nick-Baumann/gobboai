@@ -16,6 +16,7 @@ final class VoiceWakeOverlayController: ObservableObject {
         var forwardEnabled: Bool = false
         var isSending: Bool = false
         var attributed: NSAttributedString = NSAttributedString(string: "")
+        var isOverflowing: Bool = false
     }
 
     private var window: NSPanel?
@@ -209,6 +210,7 @@ final class VoiceWakeOverlayController: ObservableObject {
 
         let contentHeight = ceil(used.height + (textInset.height * 2))
         let total = contentHeight + self.verticalPadding * 2
+        self.model.isOverflowing = total > 400
         return max(48, min(total, 400))
     }
 
@@ -258,6 +260,7 @@ private struct VoiceWakeOverlayView: View {
                     set: { self.controller.updateText($0) }),
                 attributed: self.controller.model.attributed,
                 isFinal: self.controller.model.isFinal,
+                isOverflowing: self.controller.model.isOverflowing,
                 onBeginEditing: {
                     self.controller.userBeganEditing()
                 },
@@ -313,6 +316,7 @@ private struct TranscriptTextView: NSViewRepresentable {
     @Binding var text: String
     var attributed: NSAttributedString
     var isFinal: Bool
+    var isOverflowing: Bool
     var onBeginEditing: () -> Void
     var onSend: () -> Void
 
@@ -354,7 +358,9 @@ private struct TranscriptTextView: NSViewRepresentable {
         let scroll = NSScrollView()
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
-        scroll.hasVerticalScroller = true
+        scroll.hasVerticalScroller = self.isOverflowing
+        scroll.autohidesScrollers = true
+        scroll.scrollerStyle = .overlay
         scroll.hasHorizontalScroller = false
         scroll.documentView = textView
         return scroll
