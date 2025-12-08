@@ -47,6 +47,12 @@ struct VoiceWakeSettings: View {
                     binding: self.voiceWakeBinding)
                     .disabled(!voiceWakeSupported)
 
+                SettingsToggleRow(
+                    title: "Hold Cmd+Fn to talk",
+                    subtitle: "Push-to-talk mode that starts listening while you hold the hotkey and shows the preview overlay.",
+                    binding: self.$state.voicePushToTalkEnabled)
+                    .disabled(!voiceWakeSupported)
+
                 if !voiceWakeSupported {
                     Label("Voice Wake requires macOS 26 or newer.", systemImage: "exclamationmark.triangle.fill")
                         .font(.callout)
