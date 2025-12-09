@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import OSLog
 
 enum VoiceWakeChime: Codable, Equatable, Sendable {
     case none
@@ -44,11 +45,13 @@ struct VoiceWakeChimeCatalog {
 
 @MainActor
 enum VoiceWakeChimePlayer {
+    private static let logger = Logger(subsystem: "com.steipete.clawdis", category: "voicewake.chime")
     private static var lastSound: NSSound?
 
     @MainActor
     static func play(_ chime: VoiceWakeChime) {
         guard let sound = self.sound(for: chime) else { return }
+        self.logger.log(level: .info, "chime play type=\(String(describing: chime), privacy: .public) name=\(sound.name ?? "", privacy: .public)")
         self.lastSound = sound
         sound.stop()
         sound.play()

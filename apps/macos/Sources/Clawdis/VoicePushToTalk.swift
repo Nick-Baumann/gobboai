@@ -156,11 +156,8 @@ actor VoicePushToTalk {
         self.triggerChimePlayed = false
 
         // Resume the wake-word runtime after push-to-talk finishes.
-        _ = await MainActor.run {
-            Task {
-                await VoiceWakeRuntime.shared.refresh(state: AppStateStore.shared)
-            }
-        }
+        await VoiceWakeRuntime.shared.applyPushToTalkCooldown()
+        _ = await MainActor.run { Task { await VoiceWakeRuntime.shared.refresh(state: AppStateStore.shared) } }
     }
 
     // MARK: - Private

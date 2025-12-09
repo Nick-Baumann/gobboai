@@ -39,7 +39,7 @@ final class VoiceWakeOverlayController: ObservableObject {
     let closeOverflow: CGFloat = 10
 
     func showPartial(transcript: String, attributed: NSAttributedString? = nil) {
-        self.logger.debug("overlay showPartial len=\(transcript.count, privacy: .public) visible=\(self.model.isVisible, privacy: .public) isFinal=false")
+        self.logger.log(level: .info, "overlay showPartial len=\(transcript.count, privacy: .public) visible=\(self.model.isVisible, privacy: .public) isFinal=false")
         self.autoSendTask?.cancel()
         self.forwardConfig = nil
         self.model.text = transcript
@@ -60,7 +60,7 @@ final class VoiceWakeOverlayController: ObservableObject {
         sendChime: VoiceWakeChime = .none,
         attributed: NSAttributedString? = nil)
     {
-        self.logger.debug("overlay presentFinal len=\(transcript.count, privacy: .public) autoSendAfter=\(delay ?? -1, privacy: .public) forwardEnabled=\(forwardConfig.enabled, privacy: .public)")
+        self.logger.log(level: .info, "overlay presentFinal len=\(transcript.count, privacy: .public) autoSendAfter=\(delay ?? -1, privacy: .public) forwardEnabled=\(forwardConfig.enabled, privacy: .public)")
         self.autoSendTask?.cancel()
         self.forwardConfig = forwardConfig
         self.model.text = transcript
@@ -101,31 +101,31 @@ final class VoiceWakeOverlayController: ObservableObject {
     }
 
     func sendNow(sendChime: VoiceWakeChime = .none) {
-        self.logger.debug("overlay sendNow called isSending=\(self.model.isSending, privacy: .public) forwardEnabled=\(self.model.forwardEnabled, privacy: .public) textLen=\(self.model.text.count, privacy: .public)")
+        self.logger.log(level: .info, "overlay sendNow called isSending=\(self.model.isSending, privacy: .public) forwardEnabled=\(self.model.forwardEnabled, privacy: .public) textLen=\(self.model.text.count, privacy: .public)")
         self.autoSendTask?.cancel()
         self.autoSendTask = nil
         if self.model.isSending { return }
         self.model.isEditing = false
         guard let forwardConfig, forwardConfig.enabled else {
-            self.logger.debug("overlay sendNow disabled -> dismiss")
+            self.logger.log(level: .info, "overlay sendNow disabled -> dismiss")
             self.dismiss(reason: .explicit)
             return
         }
         let text = self.model.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            self.logger.debug("overlay sendNow empty -> dismiss")
+            self.logger.log(level: .info, "overlay sendNow empty -> dismiss")
             self.dismiss(reason: .empty)
             return
         }
 
         if sendChime != .none {
-            self.logger.debug("overlay sendNow playing sendChime=\(String(describing: sendChime), privacy: .public)")
+            self.logger.log(level: .info, "overlay sendNow playing sendChime=\(String(describing: sendChime), privacy: .public)")
             VoiceWakeChimePlayer.play(sendChime)
         }
 
         self.model.isSending = true
         let payload = VoiceWakeForwarder.prefixedTranscript(text)
-        self.logger.debug("overlay sendNow forwarding len=\(payload.count, privacy: .public) target=\(forwardConfig.target, privacy: .public)")
+        self.logger.log(level: .info, "overlay sendNow forwarding len=\(payload.count, privacy: .public) target=\(forwardConfig.target, privacy: .public)")
         Task.detached {
             await VoiceWakeForwarder.forward(transcript: payload, config: forwardConfig)
         }
@@ -135,7 +135,7 @@ final class VoiceWakeOverlayController: ObservableObject {
     }
 
     func dismiss(reason: DismissReason = .explicit, outcome: SendOutcome = .empty) {
-        self.logger.debug("overlay dismiss reason=\(String(describing: reason), privacy: .public) outcome=\(String(describing: outcome), privacy: .public) visible=\(self.model.isVisible, privacy: .public) sending=\(self.model.isSending, privacy: .public)")
+        self.logger.log(level: .info, "overlay dismiss reason=\(String(describing: reason), privacy: .public) outcome=\(String(describing: outcome), privacy: .public) visible=\(self.model.isVisible, privacy: .public) sending=\(self.model.isSending, privacy: .public)")
         self.autoSendTask?.cancel()
         self.model.isSending = false
         self.model.isEditing = false
@@ -180,7 +180,7 @@ final class VoiceWakeOverlayController: ObservableObject {
         guard let window else { return }
         if !self.model.isVisible {
             self.model.isVisible = true
-            self.logger.debug("overlay present windowShown textLen=\(self.model.text.count, privacy: .public)")
+            self.logger.log(level: .info, "overlay present windowShown textLen=\(self.model.text.count, privacy: .public)")
             // Keep the status item in “listening” mode until we explicitly dismiss the overlay.
             AppStateStore.shared.triggerVoiceEars(ttl: nil)
             let start = target.offsetBy(dx: 0, dy: -6)
@@ -293,7 +293,7 @@ final class VoiceWakeOverlayController: ObservableObject {
     }
 
     private func scheduleAutoSend(after delay: TimeInterval, sendChime: VoiceWakeChime) {
-        self.logger.debug("overlay scheduleAutoSend after=\(delay, privacy: .public) sendChime=\(String(describing: sendChime), privacy: .public)")
+        self.logger.log(level: .info, "overlay scheduleAutoSend after=\(delay, privacy: .public) sendChime=\(String(describing: sendChime), privacy: .public)")
         self.autoSendTask?.cancel()
         self.autoSendTask = Task<Void, Never> { [weak self, sendChime] in
             let nanos = UInt64(max(0, delay) * 1_000_000_000)
@@ -301,7 +301,7 @@ final class VoiceWakeOverlayController: ObservableObject {
             guard !Task.isCancelled else { return }
             await MainActor.run {
                 guard let self else { return }
-                self.logger.debug("overlay autoSend firing")
+                self.logger.log(level: .info, "overlay autoSend firing")
                 self.sendNow(sendChime: sendChime)
                 self.autoSendTask = nil
             }
