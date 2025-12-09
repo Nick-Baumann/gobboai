@@ -271,8 +271,14 @@ struct OnboardingView: View {
                 }
 
                 HStack(spacing: 12) {
-                    Button("Refresh status") { Task { await self.refreshPerms() } }
-                        .controlSize(.small)
+                    Button {
+                        Task { await self.refreshPerms() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .help("Refresh status")
                     if self.isRequesting {
                         ProgressView()
                             .controlSize(.small)

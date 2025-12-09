@@ -41,7 +41,13 @@ struct InstancesSettings: View {
             if self.store.isLoading {
                 ProgressView()
             } else {
-                Button("Refresh") { Task { await self.store.refresh() } }
+                Button {
+                    Task { await self.store.refresh() }
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .help("Refresh")
             }
         }
     }

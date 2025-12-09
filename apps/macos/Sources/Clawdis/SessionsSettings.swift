@@ -65,6 +65,8 @@ struct SessionsSettings: View {
                         .labelStyle(.titleAndIcon)
                 }
                 .disabled(self.loading)
+                .buttonStyle(.bordered)
+                .help("Refresh session store")
 
                 Button {
                     self.revealStore()
