@@ -375,6 +375,10 @@ actor VoiceWakeRuntime {
         }
     }
 
+    func applyPushToTalkCooldown() {
+        self.cooldownUntil = Date().addingTimeInterval(self.debounceAfterSend)
+    }
+
     func pauseForPushToTalk() {
         self.listeningState = .pushToTalk
         self.stop(dismissOverlay: false)
