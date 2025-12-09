@@ -158,7 +158,7 @@ export async function logoutWeb(runtime: RuntimeEnv = defaultRuntime) {
   return true;
 }
 
-function readWebSelfId() {
+export function readWebSelfId() {
   // Read the cached WhatsApp Web identity (jid + E.164) from disk if present.
   const credsPath = path.join(WA_WEB_AUTH_DIR, "creds.json");
   try {

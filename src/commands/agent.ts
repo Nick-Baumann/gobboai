@@ -37,6 +37,7 @@ type AgentCommandOpts = {
   json?: boolean;
   timeout?: string;
   deliver?: boolean;
+  surface?: string;
 };
 
 type SessionResolution = {
@@ -270,6 +271,7 @@ export async function agentCommand(
     From: opts.to,
     SessionId: sessionId,
     IsNewSession: isNewSession ? "true" : "false",
+    Surface: opts.surface,
   };
 
   const sessionIntro =

@@ -1,6 +1,8 @@
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
 import { info } from "../globals.js";
+import { buildProviderSummary } from "../infra/provider-summary.js";
+import { peekSystemEvents } from "../infra/system-events.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { resolveHeartbeatSeconds } from "../web/reconnect.js";
 import {
@@ -12,6 +14,8 @@ import {
 export type StatusSummary = {
   web: { linked: boolean; authAgeMs: number | null };
   heartbeatSeconds: number;
+  providerSummary: string;
+  queuedSystemEvents: string[];
   sessions: {
     path: string;
     count: number;
@@ -28,6 +32,8 @@ export async function getStatusSummary(): Promise<StatusSummary> {
   const linked = await webAuthExists();
   const authAgeMs = getWebAuthAgeMs();
   const heartbeatSeconds = resolveHeartbeatSeconds(cfg, undefined);
+  const providerSummary = await buildProviderSummary(cfg);
+  const queuedSystemEvents = peekSystemEvents();
 
   const storePath = resolveStorePath(cfg.inbound?.reply?.session?.store);
   const store = loadSessionStore(storePath);
@@ -44,6 +50,8 @@ export async function getStatusSummary(): Promise<StatusSummary> {
   return {
     web: { linked, authAgeMs },
     heartbeatSeconds,
+    providerSummary,
+    queuedSystemEvents,
     sessions: {
       path: storePath,
       count: sessions.length,
@@ -79,6 +87,15 @@ export async function statusCommand(
   );
   if (summary.web.linked) {
     logWebSelfId(runtime, true);
+  }
+  runtime.log(info(`System: ${summary.providerSummary}`));
+  if (summary.queuedSystemEvents.length > 0) {
+    const preview = summary.queuedSystemEvents.slice(0, 3).join(" | ");
+    runtime.log(
+      info(
+        `Queued system events (${summary.queuedSystemEvents.length}): ${preview}`,
+      ),
+    );
   }
   runtime.log(info(`Heartbeat: ${summary.heartbeatSeconds}s`));
   runtime.log(info(`Session store: ${summary.sessions.path}`));

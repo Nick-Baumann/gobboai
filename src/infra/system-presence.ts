@@ -1,0 +1,48 @@
+export type SystemPresence = {
+  host?: string;
+  ip?: string;
+  version?: string;
+  lastInputSeconds?: number;
+  mode?: string;
+  reason?: string;
+  text: string;
+  ts: number;
+};
+
+const entries = new Map<string, SystemPresence>();
+
+function parsePresence(text: string): SystemPresence {
+  const trimmed = text.trim();
+  const pattern =
+    /Node:\s*([^ (]+)\s*\(([^)]+)\)\s*·\s*app\s*([^·]+?)\s*·\s*last input\s*([0-9]+)s ago\s*·\s*mode\s*([^·]+?)\s*·\s*reason\s*(.+)$/i;
+  const match = trimmed.match(pattern);
+  if (!match) {
+    return { text: trimmed, ts: Date.now() };
+  }
+  const [, host, ip, version, lastInputStr, mode, reasonRaw] = match;
+  const lastInputSeconds = Number.parseInt(lastInputStr, 10);
+  const reason = reasonRaw.trim();
+  return {
+    host: host.trim(),
+    ip: ip.trim(),
+    version: version.trim(),
+    lastInputSeconds: Number.isFinite(lastInputSeconds)
+      ? lastInputSeconds
+      : undefined,
+    mode: mode.trim(),
+    reason,
+    text: trimmed,
+    ts: Date.now(),
+  };
+}
+
+export function updateSystemPresence(text: string) {
+  const parsed = parsePresence(text);
+  const key =
+    parsed.host?.toLowerCase() || parsed.ip || parsed.text.slice(0, 64);
+  entries.set(key, parsed);
+}
+
+export function listSystemPresence(): SystemPresence[] {
+  return [...entries.values()].sort((a, b) => b.ts - a.ts);
+}
