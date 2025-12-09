@@ -15,6 +15,7 @@ import {
   listSystemPresence,
   updateSystemPresence,
 } from "../infra/system-presence.js";
+import { routeLogsToStderr } from "../logging.js";
 import { setHeartbeatsEnabled } from "../provider-web.js";
 import type { RuntimeEnv } from "../runtime.js";
 
@@ -28,6 +29,9 @@ export async function runRpcLoop(io: {
   input: Readable;
   output: Writable;
 }): Promise<RpcLoopHandles> {
+  // Keep stdout reserved for RPC JSON replies; send all other logs to stderr.
+  routeLogsToStderr();
+
   const rl = createInterface({ input: io.input, crlfDelay: Infinity });
 
   const respond = (obj: unknown) => {
