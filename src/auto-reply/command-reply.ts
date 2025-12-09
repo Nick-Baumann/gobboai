@@ -625,9 +625,10 @@ export async function runCommandReply(
               toolCallId?: string;
               tool_call_id?: string;
             };
-            const role = msg.role;
+            const role =
+              typeof msg.role === "string" ? msg.role.toLowerCase() : "";
             const isToolResult =
-              role === "toolResult" || role === "tool_result";
+              role === "toolresult" || role === "tool_result";
             if (!isToolResult || !Array.isArray(msg.content)) {
               // not a tool result message we care about
             } else {

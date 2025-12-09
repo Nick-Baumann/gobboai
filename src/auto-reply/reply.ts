@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+
 import { lookupContextTokens } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL } from "../agents/defaults.js";
 import { resolveBundledPiBinary } from "../agents/pi-path.js";
@@ -13,7 +14,9 @@ import {
   saveSessionStore,
 } from "../config/sessions.js";
 import { isVerbose, logVerbose } from "../globals.js";
+import { buildProviderSummary } from "../infra/provider-summary.js";
 import { triggerWarelayRestart } from "../infra/restart.js";
+import { drainSystemEvents } from "../infra/system-events.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import { defaultRuntime } from "../runtime.js";
 import { resolveHeartbeatSeconds } from "../web/reconnect.js";
@@ -603,6 +606,26 @@ export async function getReplyFromConfig(
       await saveSessionStore(storePath, sessionStore);
     } else if (abortKey) {
       ABORT_MEMORY.set(abortKey, false);
+    }
+  }
+
+  // Prepend queued system events and (for new main sessions) a provider snapshot.
+  const isGroupSession =
+    typeof ctx.From === "string" &&
+    (ctx.From.includes("@g.us") || ctx.From.startsWith("group:"));
+  const isMainSession =
+    !isGroupSession && sessionKey === (sessionCfg?.mainKey ?? "main");
+  if (isMainSession) {
+    const systemLines: string[] = [];
+    const queued = drainSystemEvents();
+    systemLines.push(...queued);
+    if (isNewSession) {
+      const summary = await buildProviderSummary(cfg);
+      if (summary) systemLines.unshift(summary);
+    }
+    if (systemLines.length > 0) {
+      const block = systemLines.map((l) => `System: ${l}`).join("\n");
+      prefixedBodyBase = `${block}\n\n${prefixedBodyBase}`;
     }
   }
   if (

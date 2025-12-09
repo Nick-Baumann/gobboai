@@ -10,6 +10,8 @@ import {
   type HeartbeatEventPayload,
   onHeartbeatEvent,
 } from "./heartbeat-events.js";
+import { enqueueSystemEvent } from "./system-events.js";
+import { listSystemPresence, updateSystemPresence } from "./system-presence.js";
 
 type ControlRequest = {
   type: "request";
@@ -156,6 +158,19 @@ export async function startControlChannel(
           const enabled = Boolean(parsed.params?.enabled);
           if (handlers.setHeartbeats) await handlers.setHeartbeats(enabled);
           respond({ ok: true });
+          break;
+        }
+        case "system-event": {
+          const text = String(parsed.params?.text ?? "").trim();
+          if (text) {
+            enqueueSystemEvent(text);
+            updateSystemPresence(text);
+          }
+          respond({ ok: true });
+          break;
+        }
+        case "system-presence": {
+          respond(listSystemPresence());
           break;
         }
         default:

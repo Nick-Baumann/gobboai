@@ -262,6 +262,7 @@ async function handleRpc(
         deliver,
         to,
         json: true,
+        surface: "webchat",
       },
       runtime,
     );
