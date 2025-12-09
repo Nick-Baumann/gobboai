@@ -35,9 +35,16 @@ struct PermissionStatusList: View {
                     Task { await self.handle(cap) }
                 }
             }
-            Button("Refresh status") { Task { await self.refresh() } }
-                .font(.footnote)
-                .padding(.top, 2)
+            Button {
+                Task { await self.refresh() }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .font(.footnote)
+            .padding(.top, 2)
+            .help("Refresh status")
         }
     }
 
