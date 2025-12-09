@@ -44,6 +44,7 @@ let cachedLogger: TsLogger<LogObj> | null = null;
 let cachedSettings: ResolvedSettings | null = null;
 let overrideSettings: LoggerSettings | null = null;
 let consolePatched = false;
+let forceConsoleToStderr = false;
 
 function normalizeLevel(level?: string): Level {
   if (isVerbose()) return "trace";
@@ -183,6 +184,12 @@ export function resetLogger() {
   overrideSettings = null;
 }
 
+// Route all console output (including tslog console writes) to stderr.
+// This keeps stdout clean for RPC/JSON modes.
+export function routeLogsToStderr(): void {
+  forceConsoleToStderr = true;
+}
+
 /**
  * Route console.* calls through pino while still emitting to stdout/stderr.
  * This keeps user-facing output unchanged but guarantees every console call is captured in log files.
@@ -224,7 +231,15 @@ export function enableConsoleCapture(): void {
       } catch {
         // never block console output on logging failures
       }
-      orig.apply(console, args as []);
+      if (forceConsoleToStderr) {
+        const target =
+          level === "error" || level === "fatal" || level === "warn"
+            ? process.stderr
+            : process.stderr; // in RPC/JSON mode, keep stdout clean
+        target.write(`${formatted}\n`);
+      } else {
+        orig.apply(console, args as []);
+      }
     };
 
   console.log = forward("info", original.log);
