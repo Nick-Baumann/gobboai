@@ -218,12 +218,7 @@ export async function statusCommand(
     runtime.log(`  ${line}`);
   }
   if (health) {
-    const waLine = health.web.connect
-      ? health.web.connect.ok
-        ? info(`WA connect: ok (${health.web.connect.elapsedMs}ms)`)
-        : `WA connect: failed (${health.web.connect.status ?? "unknown"})${health.web.connect.error ? ` - ${health.web.connect.error}` : ""}`
-      : info("WA connect: skipped (not linked)");
-    runtime.log(waLine);
+    runtime.log(info("WA connect: reported by gateway (no direct probe)"));
 
     const tgLine = health.telegram.configured
       ? health.telegram.probe?.ok

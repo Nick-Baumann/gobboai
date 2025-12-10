@@ -4,22 +4,8 @@ import { info } from "../globals.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { makeProxyFetch } from "../telegram/proxy.js";
 import { resolveHeartbeatSeconds } from "../web/reconnect.js";
-import {
-  createWaSocket,
-  getStatusCode,
-  getWebAuthAgeMs,
-  logWebSelfId,
-  waitForWaConnection,
-  webAuthExists,
-} from "../web/session.js";
+import { getWebAuthAgeMs, logWebSelfId, webAuthExists } from "../web/session.js";
 import { callGateway } from "../gateway/call.js";
-
-type HealthConnect = {
-  ok: boolean;
-  status?: number | null;
-  error?: string | null;
-  elapsedMs: number;
-};
 
 type TelegramProbe = {
   ok: boolean;
@@ -36,7 +22,6 @@ export type HealthSummary = {
   web: {
     linked: boolean;
     authAgeMs: number | null;
-    connect?: HealthConnect;
   };
   telegram: {
     configured: boolean;
@@ -56,49 +41,6 @@ export type HealthSummary = {
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const TELEGRAM_API_BASE = "https://api.telegram.org";
-
-async function probeWebConnect(timeoutMs: number): Promise<HealthConnect> {
-  const started = Date.now();
-  const sock = await createWaSocket(false, false);
-  try {
-    await Promise.race([
-      waitForWaConnection(sock),
-      new Promise((_resolve, reject) =>
-        setTimeout(() => reject(new Error("timeout")), timeoutMs),
-      ),
-    ]);
-    return {
-      ok: true,
-      status: null,
-      error: null,
-      elapsedMs: Date.now() - started,
-    };
-  } catch (err) {
-    const status = getStatusCode(err);
-    // Conflict/duplicate sessions are expected when the primary gateway session
-    // is already connected. Treat these as healthy so health checks don’t flap.
-    if (status === 409 || status === 515) {
-      return {
-        ok: true,
-        status,
-        error: "already connected (conflict)",
-        elapsedMs: Date.now() - started,
-      };
-    }
-    return {
-      ok: false,
-      status,
-      error: err instanceof Error ? err.message : String(err),
-      elapsedMs: Date.now() - started,
-    };
-  } finally {
-    try {
-      sock.ws?.close();
-    } catch {
-      // ignore
-    }
-  }
-}
 
 async function fetchWithTimeout(
   url: string,
@@ -189,7 +131,6 @@ async function probeTelegram(
 
 export async function getHealthSnapshot(
   timeoutMs?: number,
-  opts?: { probe?: boolean },
 ): Promise<HealthSummary> {
   const cfg = loadConfig();
   const linked = await webAuthExists();
@@ -209,9 +150,6 @@ export async function getHealthSnapshot(
 
   const start = Date.now();
   const cappedTimeout = Math.max(1000, timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  const connect =
-    linked && opts?.probe ? await probeWebConnect(cappedTimeout) : undefined;
-
   const telegramToken =
     process.env.TELEGRAM_BOT_TOKEN ?? cfg.telegram?.botToken ?? "";
   const telegramConfigured = telegramToken.trim().length > 0;
@@ -223,7 +161,7 @@ export async function getHealthSnapshot(
   const summary: HealthSummary = {
     ts: Date.now(),
     durationMs: Date.now() - start,
-    web: { linked, authAgeMs, connect },
+    web: { linked, authAgeMs },
     telegram: { configured: telegramConfigured, probe: telegramProbe },
     heartbeatSeconds,
     sessions: {
