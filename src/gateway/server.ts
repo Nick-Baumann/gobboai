@@ -701,7 +701,7 @@ export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
             const cached = healthCache;
             if (cached && now - cached.ts < HEALTH_REFRESH_INTERVAL_MS) {
               respond(true, cached, undefined, { cached: true });
-              void refreshHealthSnapshot({ probe: true }).catch((err) =>
+              void refreshHealthSnapshot({ probe: false }).catch((err) =>
                 logError(
                   `background health refresh failed: ${formatError(err)}`,
                 ),
@@ -709,7 +709,7 @@ export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
               break;
             }
             try {
-              const snap = await refreshHealthSnapshot({ probe: true });
+              const snap = await refreshHealthSnapshot({ probe: false });
               respond(true, snap, undefined);
             } catch (err) {
               respond(
