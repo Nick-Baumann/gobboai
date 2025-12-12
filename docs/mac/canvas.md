@@ -82,6 +82,24 @@ This should be modeled after `WebChatManager`/`WebChatWindowController` but targ
 Related:
 - For “invoke the agent again from UI” flows, prefer the macOS deep link scheme (`clawdis://agent?...`) so *any* UI surface (Canvas, WebChat, native views) can trigger a new agent run. See `docs/clawdis-mac.md`.
 
+## Triggering agent runs from Canvas (deep links)
+
+Canvas can trigger new agent runs via the macOS app deep-link scheme:
+- `clawdis://agent?...`
+
+This is intentionally separate from `clawdis-canvas://…` (which is only for serving local Canvas files into the `WKWebView`).
+
+Suggested patterns:
+- HTML: render links/buttons that navigate to `clawdis://agent?message=...`.
+- JS: set `window.location.href = 'clawdis://agent?...'` for “run this now” actions.
+
+Implementation note (important):
+- In `WKWebView`, intercept `clawdis://…` navigations in `WKNavigationDelegate` and forward them to the app, e.g. by calling `DeepLinkHandler.shared.handle(url:)` and returning `.cancel` for the navigation.
+
+Safety:
+- `clawdis://agent` is disabled by default and must be enabled in **Clawdis → Settings → Debug** (“Allow URL scheme (agent)”).
+- Without a `key` query param, the app will prompt for confirmation before invoking the agent.
+
 ## Security / guardrails
 
 Recommended defaults:

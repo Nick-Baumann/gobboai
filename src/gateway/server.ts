@@ -22,6 +22,10 @@ import {
 import { isVerbose } from "../globals.js";
 import { onAgentEvent } from "../infra/agent-events.js";
 import { GatewayLockError } from "../infra/gateway-lock.js";
+import {
+  getLastHeartbeatEvent,
+  onHeartbeatEvent,
+} from "../infra/heartbeat-events.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import {
   listSystemPresence,
@@ -35,6 +39,7 @@ import { defaultRuntime } from "../runtime.js";
 import { monitorTelegramProvider } from "../telegram/monitor.js";
 import { sendMessageTelegram } from "../telegram/send.js";
 import { normalizeE164 } from "../utils.js";
+import { setHeartbeatsEnabled } from "../web/auto-reply.js";
 import { sendMessageWhatsApp } from "../web/outbound.js";
 import { ensureWebChatServerFromConfig } from "../webchat/server.js";
 import { buildMessageWithAttachments } from "./chat-attachments.js";
@@ -65,6 +70,8 @@ type Client = {
 const METHODS = [
   "health",
   "status",
+  "last-heartbeat",
+  "set-heartbeats",
   "system-presence",
   "system-event",
   "send",
@@ -74,7 +81,15 @@ const METHODS = [
   "chat.send",
 ];
 
-const EVENTS = ["agent", "chat", "presence", "tick", "shutdown", "health"];
+const EVENTS = [
+  "agent",
+  "chat",
+  "presence",
+  "tick",
+  "shutdown",
+  "health",
+  "heartbeat",
+];
 
 export type GatewayServer = {
   close: () => Promise<void>;
@@ -492,6 +507,10 @@ export async function startGatewayServer(
         chatRunSessions.delete(evt.runId);
       }
     }
+  });
+
+  const heartbeatUnsub = onHeartbeatEvent((evt) => {
+    broadcast("heartbeat", evt, { dropIfSlow: true });
   });
 
   wss.on("connection", (socket) => {
@@ -974,6 +993,28 @@ export async function startGatewayServer(
             respond(true, status, undefined);
             break;
           }
+          case "last-heartbeat": {
+            respond(true, getLastHeartbeatEvent(), undefined);
+            break;
+          }
+          case "set-heartbeats": {
+            const params = (req.params ?? {}) as Record<string, unknown>;
+            const enabled = params.enabled;
+            if (typeof enabled !== "boolean") {
+              respond(
+                false,
+                undefined,
+                errorShape(
+                  ErrorCodes.INVALID_REQUEST,
+                  "invalid set-heartbeats params: enabled (boolean) required",
+                ),
+              );
+              break;
+            }
+            setHeartbeatsEnabled(enabled);
+            respond(true, { ok: true, enabled }, undefined);
+            break;
+          }
           case "system-presence": {
             const presence = listSystemPresence();
             respond(true, presence, undefined);
@@ -1395,6 +1436,13 @@ export async function startGatewayServer(
       if (agentUnsub) {
         try {
           agentUnsub();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (heartbeatUnsub) {
+        try {
+          heartbeatUnsub();
         } catch {
           /* ignore */
         }

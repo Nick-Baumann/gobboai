@@ -491,6 +491,7 @@ struct ClawdisCLI {
         shutdown(fd, SHUT_WR)
 
         var data = Data()
+        let decoder = JSONDecoder()
         var buffer = [UInt8](repeating: 0, count: 8192)
         let bufSize = buffer.count
         while true {
@@ -501,14 +502,20 @@ struct ClawdisCLI {
                 until: deadline,
                 timeoutSeconds: timeoutSeconds)
             let n = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress!, bufSize) }
-            if n > 0 { data.append(buffer, count: n); continue }
+            if n > 0 {
+                data.append(buffer, count: n)
+                if let resp = try? decoder.decode(Response.self, from: data) {
+                    return resp
+                }
+                continue
+            }
             if n == 0 { break }
             if n == -1, errno == EINTR { continue }
             if n == -1, errno == EAGAIN { continue }
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
         guard !data.isEmpty else { throw POSIXError(.ECONNRESET) }
-        return try JSONDecoder().decode(Response.self, from: data)
+        return try decoder.decode(Response.self, from: data)
     }
 
     private static func rpcTimeoutSeconds(for request: Request) -> TimeInterval {

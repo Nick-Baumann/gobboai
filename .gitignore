@@ -9,6 +9,7 @@ apps/macos/.build/
 bin/clawdis-mac
 apps/macos/.build-local/
 apps/macos/.swiftpm/
+Core/
 apps/ios/*.xcodeproj/
 apps/ios/*.xcworkspace/
 apps/ios/.swiftpm/

@@ -111,8 +111,8 @@ final class ControlChannel: ObservableObject {
     }
 
     func lastHeartbeat() async throws -> ControlHeartbeatEvent? {
-        // Heartbeat removed in new protocol
-        nil
+        let data = try await self.request(method: "last-heartbeat")
+        return try JSONDecoder().decode(ControlHeartbeatEvent?.self, from: data)
     }
 
     func request(
@@ -218,6 +218,13 @@ final class ControlChannel: ObservableObject {
             {
                 AgentEventStore.shared.append(agent)
                 self.routeWorkActivity(from: agent)
+            }
+        case let .event(evt) where evt.event == "heartbeat":
+            if let payload = evt.payload,
+               let heartbeat = try? GatewayPayloadDecoding.decode(payload, as: ControlHeartbeatEvent.self),
+               let data = try? JSONEncoder().encode(heartbeat)
+            {
+                NotificationCenter.default.post(name: .controlHeartbeat, object: data)
             }
         case let .event(evt) where evt.event == "shutdown":
             self.state = .degraded("gateway shutdown")
