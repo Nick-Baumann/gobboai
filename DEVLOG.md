@@ -200,3 +200,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-12-09: added one more validation check
 - 2025-12-10: tightened type signatures
 - 2025-12-10: fixed a flaky test
+- 2025-12-12: noticed a slow path in the encoder
