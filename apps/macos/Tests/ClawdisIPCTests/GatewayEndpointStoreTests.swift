@@ -39,7 +39,7 @@ import Testing
         #expect(cfg.token == "t")
     }
 
-    @Test func remoteWithoutTunnelIsUnavailable() async throws {
+    @Test func remoteWithoutTunnelRecoversByEnsuringTunnel() async throws {
         let mode = ModeBox(.remote)
         let store = GatewayEndpointStore(deps: .init(
             mode: { mode.get() },
@@ -48,12 +48,9 @@ import Testing
             remotePortIfRunning: { nil },
             ensureRemoteTunnel: { 18789 }))
 
-        do {
-            _ = try await store.requireConfig()
-            Issue.record("expected requireConfig to throw")
-        } catch {
-            #expect(error.localizedDescription.contains("no active control tunnel"))
-        }
+        let cfg = try await store.requireConfig()
+        #expect(cfg.url.absoluteString == "ws://127.0.0.1:18789")
+        #expect(cfg.token == nil)
     }
 
     @Test func ensureRemoteTunnelPublishesReadyState() async throws {

@@ -8,6 +8,7 @@ import { WebSocket } from "ws";
 import { agentCommand } from "../commands/agent.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { GatewayLockError } from "../infra/gateway-lock.js";
+import { emitHeartbeatEvent } from "../infra/heartbeat-events.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 import { startGatewayServer } from "./server.js";
 
@@ -172,6 +173,86 @@ async function connectOk(
 }
 
 describe("gateway server", () => {
+  test("broadcasts heartbeat events and serves last-heartbeat", async () => {
+    type HeartbeatPayload = {
+      ts: number;
+      status: string;
+      to?: string;
+      preview?: string;
+      durationMs?: number;
+      hasMedia?: boolean;
+      reason?: string;
+    };
+    type EventFrame = {
+      type: "event";
+      event: string;
+      payload?: HeartbeatPayload | null;
+    };
+    type ResFrame = {
+      type: "res";
+      id: string;
+      ok: boolean;
+      payload?: unknown;
+    };
+
+    const { server, ws } = await startServerWithClient();
+    ws.send(
+      JSON.stringify({
+        type: "hello",
+        minProtocol: 1,
+        maxProtocol: 1,
+        client: { name: "test", version: "1", platform: "test", mode: "test" },
+        caps: [],
+      }),
+    );
+    await onceMessage(ws, (o) => o.type === "hello-ok");
+
+    const waitHeartbeat = onceMessage<EventFrame>(
+      ws,
+      (o) => o.type === "event" && o.event === "heartbeat",
+    );
+    emitHeartbeatEvent({ status: "sent", to: "+123", preview: "ping" });
+    const evt = await waitHeartbeat;
+    expect(evt.payload?.status).toBe("sent");
+    expect(typeof evt.payload?.ts).toBe("number");
+
+    ws.send(
+      JSON.stringify({
+        type: "req",
+        id: "hb-last",
+        method: "last-heartbeat",
+      }),
+    );
+    const last = await onceMessage<ResFrame>(
+      ws,
+      (o) => o.type === "res" && o.id === "hb-last",
+    );
+    expect(last.ok).toBe(true);
+    const lastPayload = last.payload as HeartbeatPayload | null | undefined;
+    expect(lastPayload?.status).toBe("sent");
+    expect(lastPayload?.ts).toBe(evt.payload?.ts);
+
+    ws.send(
+      JSON.stringify({
+        type: "req",
+        id: "hb-toggle-off",
+        method: "set-heartbeats",
+        params: { enabled: false },
+      }),
+    );
+    const toggle = await onceMessage<ResFrame>(
+      ws,
+      (o) => o.type === "res" && o.id === "hb-toggle-off",
+    );
+    expect(toggle.ok).toBe(true);
+    expect((toggle.payload as { enabled?: boolean } | undefined)?.enabled).toBe(
+      false,
+    );
+
+    ws.close();
+    await server.close();
+  });
+
   test("agent falls back to allowFrom when lastTo is stale", async () => {
     testAllowFrom = ["+436769770569"];
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdis-gw-"));
