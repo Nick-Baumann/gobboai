@@ -206,7 +206,8 @@ final class CanvasWindowController: NSWindowController, WKNavigationDelegate, NS
                 styleMask: [.borderless],
                 backing: .buffered,
                 defer: false)
-            panel.level = .statusBar
+            // Keep Canvas below the Voice Wake overlay panel.
+            panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue - 1)
             panel.hasShadow = true
             panel.isMovable = false
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
