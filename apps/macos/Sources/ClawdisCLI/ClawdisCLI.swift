@@ -10,6 +10,11 @@ struct ClawdisCLI {
             let jsonOutput = args.contains("--json")
             args.removeAll(where: { $0 == "--json" })
 
+            if args.first == "browser" {
+                let code = try await BrowserCLI.run(args: Array(args.dropFirst()), jsonOutput: jsonOutput)
+                exit(code)
+            }
+
             let parsed = try parseCommandLine(args: args)
             let response = try await send(request: parsed.request)
 
@@ -427,6 +432,7 @@ struct ClawdisCLI {
             [--x <screenX> --y <screenY>] [--width <w> --height <h>]
           clawdis-mac canvas eval --js <code> [--session <key>]
           clawdis-mac canvas snapshot [--out <path>] [--session <key>]
+          clawdis-mac browser status|start|stop|tabs|open|focus|close|screenshot
           clawdis-mac --help
 
         Default output is text. Use --json for machine-readable output.
