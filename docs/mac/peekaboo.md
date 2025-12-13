@@ -1,15 +1,15 @@
 ---
 summary: "Plan for integrating Peekaboo automation into Clawdis via PeekabooBridge (socket-based TCC broker)"
 read_when:
-  - Adding UI automation commands
+  - Hosting PeekabooBridge in Clawdis.app
   - Integrating Peekaboo as a submodule
-  - Changing clawdis-mac IPC/output formats
+  - Changing PeekabooBridge protocol/paths
 ---
 # Peekaboo Bridge in Clawdis (macOS UI automation broker)
 
 ## TL;DR
 - **Peekaboo removed its XPC helper** and now exposes privileged automation via a **UNIX domain socket bridge** (`PeekabooBridge` / `PeekabooBridgeHost`, socket name `bridge.sock`).
-- Clawdis integrates by **hosting the same bridge** inside **Clawdis.app** (optional, user-toggleable), and by making `clawdis-mac ui …` act as a **bridge client**.
+- Clawdis integrates by **optionally hosting the same bridge** inside **Clawdis.app** (user-toggleable). The primary client is the **`peekaboo` CLI** (installed via npm); Clawdis does not need its own `ui …` CLI surface.
 - For **visualizations**, we keep them in **Peekaboo.app** (best UX); Clawdis stays a thin broker host. No visualizer toggle in Clawdis.
 
 Non-goals:
@@ -31,9 +31,8 @@ Reference (Peekaboo submodule): `docs/bridge-host.md`.
   - **Peekaboo.app** (preferred; also provides visualizations + controls)
   - **Clawdis.app** (secondary; “thin host” only)
 - **Bridge clients** (trigger single actions):
-  - `clawdis-mac ui …`
-  - `clawdis ui …` (Node/TS convenience wrapper; shells out to `clawdis-mac ui …`)
-  - Node/Gateway shells out to `clawdis-mac`
+  - `peekaboo …` (preferred; humans + agents)
+  - Optional: Clawdis/Node shells out to `peekaboo` when it needs UI automation/capture
 
 ### Host discovery (client-side)
 Order is deliberate:
@@ -68,26 +67,22 @@ What Clawdis should *not* embed:
 - **XPC**: don’t reintroduce helper targets; use the bridge.
 
 ## IPC / CLI surface
-### Namespacing
-Add new automation commands behind a `ui` prefix:
-- `clawdis-mac ui …` for UI automation + visualization-related actions.
-- Keep existing top-level commands (`notify`, `run`, `canvas …`, etc.) for compatibility.
+### No `clawdis-mac ui …`
+We avoid a parallel “Clawdis UI automation CLI”. Instead:
+- `peekaboo` is the user/agent-facing CLI surface for automation and capture.
+- Clawdis.app can host PeekabooBridge as a **thin TCC broker** so Peekaboo can piggyback on Clawdis permissions when Peekaboo.app isn’t running.
 
-Screenshot cutover:
-- Remove legacy screenshot endpoints/commands.
-- Ship only `clawdis-mac ui screenshot` (no aliases).
+### Diagnostics
+Use Peekaboo’s built-in diagnostics to see which host would be used:
+- `peekaboo bridge status`
+- `peekaboo bridge status --verbose`
+- `peekaboo bridge status --json`
 
 ### Output format
-Change `clawdis-mac` to default to human text output:
-- **Default**: plain text; errors are string messages to stderr; exit codes indicate success/failure.
-- **`--json`**: structured output (for agents/scripts) with stable schemas.
-
-This applies globally, not only `ui` commands.
-
-Note (current state as of 2025-12-13): `clawdis-mac` prints text by default; use `--json` for structured output.
+Peekaboo commands default to human text output. Add `--json` for a structured envelope.
 
 ### Timeouts
-Default timeout for UI actions: **10 seconds** end-to-end.
+Default timeout for UI actions: **10 seconds** end-to-end (client enforced; host should also enforce per-operation).
 
 ## Coordinate model (multi-display)
 Requirement: coordinates are **per screen**, not global.
@@ -111,18 +106,18 @@ Expose window/app targeting in the UI surface (align with Peekaboo targeting):
 - by window title substring
 - by (app, index)
 
-Current `clawdis-mac ui …` support:
+Peekaboo CLI targeting (agent-friendly):
 - `--bundle-id <id>` for app targeting
-- `--window-index <n>` (0-based) for disambiguating within an app when capturing (see/screenshot)
+- `--window-index <n>` (0-based) for disambiguating within an app when capturing
 
 All “see/click/type/scroll/wait” requests should accept a target (default: frontmost).
 
 ## “See” + click packs (Playwright-style)
 Behavior stays aligned with Peekaboo:
-- `ui see` returns element IDs (e.g. `B1`, `T3`) with bounds/labels.
+- `peekaboo see` returns element IDs (e.g. `B1`, `T3`) with bounds/labels.
 - Follow-up actions reference those IDs without re-scanning.
 
-`clawdis-mac ui see` should:
+`peekaboo see` should:
 - capture (optionally targeted) window/screen
 - return a screenshot **file path** (default: temp directory)
 - return a list of elements (text or JSON)
@@ -132,9 +127,9 @@ Snapshot lifecycle requirement:
 - Snapshot scoping: “implicit snapshot” is **per target bundle id** (reuse last snapshot for that app when snapshot id is omitted).
 
 Practical flow (agent-friendly):
-- `clawdis-mac ui frontmost` returns the focused app (bundle id) + focused window (title/id) so follow-up calls can pass `--bundle-id …`.
-- `clawdis-mac ui see --bundle-id X` updates the implicit snapshot for `X`.
-- `clawdis-mac ui click --bundle-id X --on B1` reuses the most recent snapshot for `X` when `--snapshot-id` is omitted.
+- `peekaboo list apps` / `peekaboo list windows` provide bundle-id context for targeting.
+- `peekaboo see --bundle-id X` updates the implicit snapshot for `X`.
+- `peekaboo click --bundle-id X --on B1` reuses the most recent snapshot for `X` when `--snapshot-id` is omitted.
 
 ## Visualizer integration
 Keep visualizations in **Peekaboo.app** for now.
@@ -142,11 +137,11 @@ Keep visualizations in **Peekaboo.app** for now.
 - Any “visualizer enabled/disabled” setting is controlled in Peekaboo.app.
 
 ## Screenshots (legacy → Peekaboo takeover)
-Clawdis uses `clawdis-mac ui screenshot` and returns a file path (default location: temp directory) instead of raw image bytes.
+Clawdis should not grow a separate screenshot CLI surface.
 
 Migration plan:
-- Bridge host performs capture and returns a temp file path.
-- No legacy aliases; make the old screenshot surface disappear cleanly.
+- Use `peekaboo capture …` / `peekaboo see …` (returns a file path, default temp directory).
+- Once Clawdis’ legacy screenshot plumbing is replaced, remove it cleanly (no aliases).
 
 ## Permissions behavior
 If required permissions are missing:
@@ -164,22 +159,9 @@ Debug-only escape hatch (development convenience):
 - “allow same-UID callers” means: *skip codesign checks for clients running under the same Unix user*.
 - This must be **opt-in**, **DEBUG-only**, and guarded by an env var (Peekaboo uses `PEEKABOO_ALLOW_UNSIGNED_SOCKET_CLIENTS=1`).
 
-## Current `clawdis-mac ui` commands (Dec 2025)
-All commands default to text output. Add `--json` right after `clawdis-mac` for a structured envelope.
-
-- `clawdis-mac ui permissions status`
-- `clawdis-mac ui frontmost`
-- `clawdis-mac ui apps`
-- `clawdis-mac ui windows [--bundle-id <id>]`
-- `clawdis-mac ui screenshot [--screen-index <n>] [--bundle-id <id>] [--window-index <n>] [--watch] [--scale native|1x]`
-- `clawdis-mac ui see [--bundle-id <id>] [--window-index <n>] [--snapshot-id <id>]`
-- `clawdis-mac ui click --on <elementId> [--bundle-id <id>] [--snapshot-id <id>] [--double|--right]`
-- `clawdis-mac ui type --text <value> [--into <elementId>] [--bundle-id <id>] [--snapshot-id <id>] [--clear] [--delay-ms <n>]`
-- `clawdis-mac ui wait --on <elementId> [--bundle-id <id>] [--snapshot-id <id>] [--timeout <sec>]`
-
 ## Next integration steps (after this doc)
 1. Add Peekaboo as a git submodule (nested submodules OK).
-2. Add a small `clawdis-mac ui …` surface that speaks PeekabooBridge (text by default, `--json` for structured).
-3. Host `PeekabooBridgeHost` inside Clawdis.app behind a single setting (“Enable Peekaboo Bridge”, default on).
-4. Implement the minimum operation set needed for agents (see/click/type/scroll/wait/screenshot, plus list apps/windows/screens).
+2. Host `PeekabooBridgeHost` inside Clawdis.app behind a single setting (“Enable Peekaboo Bridge”, default on).
+3. Ensure Clawdis hosts the bridge at `~/Library/Application Support/clawdis/bridge.sock` and speaks the PeekabooBridge JSON protocol.
+4. Validate with `peekaboo bridge status --verbose` that Peekaboo can select Clawdis as the fallback host (no auto-launch).
 5. Keep all protocol decisions aligned with Peekaboo (coordinate system, element IDs, snapshot scoping, error envelopes).
