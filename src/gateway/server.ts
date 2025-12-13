@@ -387,7 +387,7 @@ export async function startGatewayServer(
   });
   const deps = createDefaultDeps();
   const cronEnabled =
-    process.env.CLAWDIS_SKIP_CRON !== "1" && cfgAtStart.cron?.enabled === true;
+    process.env.CLAWDIS_SKIP_CRON !== "1" && cfgAtStart.cron?.enabled !== false;
   const cron = new CronService({
     storePath: cronStorePath,
     cronEnabled,

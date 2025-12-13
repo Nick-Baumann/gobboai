@@ -100,18 +100,22 @@ The scheduler should never require additional configuration for the base directo
 
 ## Enabling
 
-Cron execution should be opt-in via config:
+Cron execution is enabled by default inside the Gateway.
+
+To disable it, set:
 
 ```json5
 {
   cron: {
-    enabled: true,
+    enabled: false,
     // optional:
     store: "~/.clawdis/cron.json",
     maxConcurrentRuns: 1
   }
 }
 ```
+
+You can also disable scheduling via the environment variable `CLAWDIS_SKIP_CRON=1`.
 
 ## Scheduler design
 
@@ -344,7 +348,7 @@ Suggested log events:
 
 - Respect existing allowlists/routing rules: delivery defaults should not send to arbitrary destinations unless explicitly configured.
 - Provide a global “kill switch”:
-  - `cron.enabled: boolean` config default true (or false until enabled).
+  - `cron.enabled: boolean` (default `true`).
   - `gateway method set-heartbeats` already exists; cron should have similar.
 - Avoid persistence of sensitive payloads unless requested; job text may contain private content.
 

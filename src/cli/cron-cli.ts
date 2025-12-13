@@ -15,7 +15,7 @@ async function warnIfCronSchedulerDisabled(opts: GatewayRpcOpts) {
     defaultRuntime.error(
       [
         "warning: cron scheduler is disabled in the Gateway; jobs are saved but will not run automatically.",
-        "Enable with `cron.enabled: true` in your clawdis config and restart the Gateway.",
+        "Re-enable with `cron.enabled: true` (or remove `cron.enabled: false`) and restart the Gateway.",
         store ? `store: ${store}` : "",
       ]
         .filter(Boolean)
