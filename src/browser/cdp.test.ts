@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 
-import { createTargetViaCdp } from "./cdp.js";
+import { createTargetViaCdp, evaluateJavaScript, snapshotAria } from "./cdp.js";
 
 describe("cdp", () => {
   let httpServer: ReturnType<typeof createServer> | null = null;
@@ -69,5 +69,94 @@ describe("cdp", () => {
     });
 
     expect(created.targetId).toBe("TARGET_123");
+  });
+
+  it("evaluates javascript via CDP", async () => {
+    wsServer = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await new Promise<void>((resolve) => wsServer?.once("listening", resolve));
+    const wsPort = (wsServer.address() as { port: number }).port;
+
+    wsServer.on("connection", (socket) => {
+      socket.on("message", (data) => {
+        const msg = JSON.parse(String(data)) as {
+          id?: number;
+          method?: string;
+          params?: { expression?: string };
+        };
+        if (msg.method === "Runtime.enable") {
+          socket.send(JSON.stringify({ id: msg.id, result: {} }));
+          return;
+        }
+        if (msg.method === "Runtime.evaluate") {
+          expect(msg.params?.expression).toBe("1+1");
+          socket.send(
+            JSON.stringify({
+              id: msg.id,
+              result: { result: { type: "number", value: 2 } },
+            }),
+          );
+        }
+      });
+    });
+
+    const res = await evaluateJavaScript({
+      wsUrl: `ws://127.0.0.1:${wsPort}`,
+      expression: "1+1",
+    });
+
+    expect(res.result.type).toBe("number");
+    expect(res.result.value).toBe(2);
+  });
+
+  it("captures an aria snapshot via CDP", async () => {
+    wsServer = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await new Promise<void>((resolve) => wsServer?.once("listening", resolve));
+    const wsPort = (wsServer.address() as { port: number }).port;
+
+    wsServer.on("connection", (socket) => {
+      socket.on("message", (data) => {
+        const msg = JSON.parse(String(data)) as {
+          id?: number;
+          method?: string;
+        };
+        if (msg.method === "Accessibility.enable") {
+          socket.send(JSON.stringify({ id: msg.id, result: {} }));
+          return;
+        }
+        if (msg.method === "Accessibility.getFullAXTree") {
+          socket.send(
+            JSON.stringify({
+              id: msg.id,
+              result: {
+                nodes: [
+                  {
+                    nodeId: "1",
+                    role: { value: "RootWebArea" },
+                    name: { value: "" },
+                    childIds: ["2"],
+                  },
+                  {
+                    nodeId: "2",
+                    role: { value: "button" },
+                    name: { value: "OK" },
+                    backendDOMNodeId: 42,
+                    childIds: [],
+                  },
+                ],
+              },
+            }),
+          );
+          return;
+        }
+      });
+    });
+
+    const snap = await snapshotAria({ wsUrl: `ws://127.0.0.1:${wsPort}` });
+    expect(snap.nodes.length).toBe(2);
+    expect(snap.nodes[0]?.role).toBe("RootWebArea");
+    expect(snap.nodes[1]?.role).toBe("button");
+    expect(snap.nodes[1]?.name).toBe("OK");
+    expect(snap.nodes[1]?.backendDOMNodeId).toBe(42);
+    expect(snap.nodes[1]?.depth).toBe(1);
   });
 });

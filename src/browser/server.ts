@@ -10,6 +10,11 @@ import {
   captureScreenshot,
   captureScreenshotPng,
   createTargetViaCdp,
+  evaluateJavaScript,
+  getDomText,
+  querySelector,
+  snapshotAria,
+  snapshotDom,
 } from "./cdp.js";
 import {
   isChromeReachable,
@@ -176,6 +181,34 @@ async function ensureBrowserAvailable(runtime: RuntimeEnv): Promise<void> {
     }
   });
   return;
+}
+
+async function ensureTabAvailable(runtime: RuntimeEnv, targetId?: string) {
+  if (!state) throw new Error("Browser server not started");
+  await ensureBrowserAvailable(runtime);
+
+  const tabs1 = await listTabs(state.cdpPort);
+  if (tabs1.length === 0) {
+    await openTab(state.cdpPort, "about:blank");
+  }
+
+  const tabs = await listTabs(state.cdpPort);
+  const chosen = targetId
+    ? (() => {
+        const resolved = resolveTargetIdFromTabs(targetId, tabs);
+        if (!resolved.ok) {
+          if (resolved.reason === "ambiguous") return "AMBIGUOUS" as const;
+          return null;
+        }
+        return tabs.find((t) => t.targetId === resolved.targetId) ?? null;
+      })()
+    : (tabs.at(0) ?? null);
+
+  if (chosen === "AMBIGUOUS") {
+    throw new Error("ambiguous target id prefix");
+  }
+  if (!chosen?.wsUrl) throw new Error("tab not found");
+  return chosen;
 }
 
 export async function startBrowserControlServerFromConfig(
@@ -370,6 +403,160 @@ export async function startBrowserControlServerFromConfig(
         url: chosen.url,
       });
     } catch (err) {
+      jsonError(res, 500, String(err));
+    }
+  });
+
+  function mapTabError(err: unknown) {
+    const msg = String(err);
+    if (msg.includes("ambiguous target id prefix")) {
+      return { status: 409, message: "ambiguous target id prefix" };
+    }
+    if (msg.includes("tab not found")) {
+      return { status: 404, message: "tab not found" };
+    }
+    return null;
+  }
+
+  app.post("/eval", async (req, res) => {
+    if (!state) return jsonError(res, 503, "browser server not started");
+    const js = String((req.body as { js?: unknown })?.js ?? "").trim();
+    const targetId = String(
+      (req.body as { targetId?: unknown })?.targetId ?? "",
+    ).trim();
+    const awaitPromise = Boolean((req.body as { await?: unknown })?.await);
+
+    if (!js) return jsonError(res, 400, "js is required");
+
+    try {
+      const tab = await ensureTabAvailable(runtime, targetId || undefined);
+      const evaluated = await evaluateJavaScript({
+        wsUrl: tab.wsUrl ?? "",
+        expression: js,
+        awaitPromise,
+        returnByValue: true,
+      });
+
+      if (evaluated.exceptionDetails) {
+        const msg =
+          evaluated.exceptionDetails.exception?.description ||
+          evaluated.exceptionDetails.text ||
+          "JavaScript evaluation failed";
+        return jsonError(res, 400, msg);
+      }
+
+      res.json({
+        ok: true,
+        targetId: tab.targetId,
+        url: tab.url,
+        result: evaluated.result,
+      });
+    } catch (err) {
+      const mapped = mapTabError(err);
+      if (mapped) return jsonError(res, mapped.status, mapped.message);
+      jsonError(res, 500, String(err));
+    }
+  });
+
+  app.get("/query", async (req, res) => {
+    if (!state) return jsonError(res, 503, "browser server not started");
+    const selector =
+      typeof req.query.selector === "string" ? req.query.selector.trim() : "";
+    const targetId =
+      typeof req.query.targetId === "string" ? req.query.targetId.trim() : "";
+    const limit =
+      typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+
+    if (!selector) return jsonError(res, 400, "selector is required");
+
+    try {
+      const tab = await ensureTabAvailable(runtime, targetId || undefined);
+      const result = await querySelector({
+        wsUrl: tab.wsUrl ?? "",
+        selector,
+        limit,
+      });
+      res.json({ ok: true, targetId: tab.targetId, url: tab.url, ...result });
+    } catch (err) {
+      const mapped = mapTabError(err);
+      if (mapped) return jsonError(res, mapped.status, mapped.message);
+      jsonError(res, 500, String(err));
+    }
+  });
+
+  app.get("/dom", async (req, res) => {
+    if (!state) return jsonError(res, 503, "browser server not started");
+    const targetId =
+      typeof req.query.targetId === "string" ? req.query.targetId.trim() : "";
+    const format = req.query.format === "text" ? "text" : "html";
+    const selector =
+      typeof req.query.selector === "string" ? req.query.selector.trim() : "";
+    const maxChars =
+      typeof req.query.maxChars === "string"
+        ? Number(req.query.maxChars)
+        : undefined;
+
+    try {
+      const tab = await ensureTabAvailable(runtime, targetId || undefined);
+      const result = await getDomText({
+        wsUrl: tab.wsUrl ?? "",
+        format,
+        maxChars,
+        selector: selector || undefined,
+      });
+      res.json({
+        ok: true,
+        targetId: tab.targetId,
+        url: tab.url,
+        format,
+        ...result,
+      });
+    } catch (err) {
+      const mapped = mapTabError(err);
+      if (mapped) return jsonError(res, mapped.status, mapped.message);
+      jsonError(res, 500, String(err));
+    }
+  });
+
+  app.get("/snapshot", async (req, res) => {
+    if (!state) return jsonError(res, 503, "browser server not started");
+    const targetId =
+      typeof req.query.targetId === "string" ? req.query.targetId.trim() : "";
+    const format = req.query.format === "domSnapshot" ? "domSnapshot" : "aria";
+    const limit =
+      typeof req.query.limit === "string" ? Number(req.query.limit) : undefined;
+
+    try {
+      const tab = await ensureTabAvailable(runtime, targetId || undefined);
+
+      if (format === "aria") {
+        const snap = await snapshotAria({
+          wsUrl: tab.wsUrl ?? "",
+          limit,
+        });
+        return res.json({
+          ok: true,
+          format,
+          targetId: tab.targetId,
+          url: tab.url,
+          ...snap,
+        });
+      }
+
+      const snap = await snapshotDom({
+        wsUrl: tab.wsUrl ?? "",
+        limit,
+      });
+      return res.json({
+        ok: true,
+        format,
+        targetId: tab.targetId,
+        url: tab.url,
+        ...snap,
+      });
+    } catch (err) {
+      const mapped = mapTabError(err);
+      if (mapped) return jsonError(res, mapped.status, mapped.message);
       jsonError(res, 500, String(err));
     }
   });

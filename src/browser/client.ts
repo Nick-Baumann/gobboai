@@ -28,6 +28,83 @@ export type ScreenshotResult = {
   url: string;
 };
 
+export type EvalResult = {
+  ok: true;
+  targetId: string;
+  url: string;
+  result: {
+    type: string;
+    subtype?: string;
+    value?: unknown;
+    description?: string;
+    unserializableValue?: string;
+    preview?: unknown;
+  };
+};
+
+export type QueryResult = {
+  ok: true;
+  targetId: string;
+  url: string;
+  matches: Array<{
+    index: number;
+    tag: string;
+    id?: string;
+    className?: string;
+    text?: string;
+    value?: string;
+    href?: string;
+    outerHTML?: string;
+  }>;
+};
+
+export type DomResult = {
+  ok: true;
+  targetId: string;
+  url: string;
+  format: "html" | "text";
+  text: string;
+};
+
+export type SnapshotAriaNode = {
+  ref: string;
+  role: string;
+  name: string;
+  value?: string;
+  description?: string;
+  backendDOMNodeId?: number;
+  depth: number;
+};
+
+export type SnapshotResult =
+  | {
+      ok: true;
+      format: "aria";
+      targetId: string;
+      url: string;
+      nodes: SnapshotAriaNode[];
+    }
+  | {
+      ok: true;
+      format: "domSnapshot";
+      targetId: string;
+      url: string;
+      nodes: Array<{
+        ref: string;
+        parentRef: string | null;
+        depth: number;
+        tag: string;
+        id?: string;
+        className?: string;
+        role?: string;
+        name?: string;
+        text?: string;
+        href?: string;
+        type?: string;
+        value?: string;
+      }>;
+    };
+
 function unwrapCause(err: unknown): unknown {
   if (!err || typeof err !== "object") return null;
   const cause = (err as { cause?: unknown }).cause;
@@ -171,4 +248,81 @@ export async function browserScreenshot(
   return await fetchJson<ScreenshotResult>(`${baseUrl}/screenshot${suffix}`, {
     timeoutMs: 20000,
   });
+}
+
+export async function browserEval(
+  baseUrl: string,
+  opts: {
+    js: string;
+    targetId?: string;
+    awaitPromise?: boolean;
+  },
+): Promise<EvalResult> {
+  return await fetchJson<EvalResult>(`${baseUrl}/eval`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      js: opts.js,
+      targetId: opts.targetId,
+      await: Boolean(opts.awaitPromise),
+    }),
+    timeoutMs: 15000,
+  });
+}
+
+export async function browserQuery(
+  baseUrl: string,
+  opts: {
+    selector: string;
+    targetId?: string;
+    limit?: number;
+  },
+): Promise<QueryResult> {
+  const q = new URLSearchParams();
+  q.set("selector", opts.selector);
+  if (opts.targetId) q.set("targetId", opts.targetId);
+  if (typeof opts.limit === "number") q.set("limit", String(opts.limit));
+  return await fetchJson<QueryResult>(`${baseUrl}/query?${q.toString()}`, {
+    timeoutMs: 15000,
+  });
+}
+
+export async function browserDom(
+  baseUrl: string,
+  opts: {
+    format: "html" | "text";
+    targetId?: string;
+    maxChars?: number;
+    selector?: string;
+  },
+): Promise<DomResult> {
+  const q = new URLSearchParams();
+  q.set("format", opts.format);
+  if (opts.targetId) q.set("targetId", opts.targetId);
+  if (typeof opts.maxChars === "number")
+    q.set("maxChars", String(opts.maxChars));
+  if (opts.selector) q.set("selector", opts.selector);
+  return await fetchJson<DomResult>(`${baseUrl}/dom?${q.toString()}`, {
+    timeoutMs: 20000,
+  });
+}
+
+export async function browserSnapshot(
+  baseUrl: string,
+  opts: {
+    format: "aria" | "domSnapshot";
+    targetId?: string;
+    limit?: number;
+  },
+): Promise<SnapshotResult> {
+  const q = new URLSearchParams();
+  q.set("format", opts.format);
+  if (opts.targetId) q.set("targetId", opts.targetId);
+  if (typeof opts.limit === "number") q.set("limit", String(opts.limit));
+  return await fetchJson<SnapshotResult>(
+    `${baseUrl}/snapshot?${q.toString()}`,
+    {
+      timeoutMs: 20000,
+    },
+  );
 }

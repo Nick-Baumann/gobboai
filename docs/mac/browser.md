@@ -109,9 +109,20 @@ Minimum endpoints/methods (names illustrative):
 - `browser.screenshot`
   - params: `{ targetId?, fullPage?: false }` → returns a `MEDIA:` attachment URL (via the existing Clawdis media host)
 
+DOM + inspection (v1):
+- `browser.eval`
+  - params: `{ js, targetId?, await?: false }` → returns the CDP `Runtime.evaluate` result (best-effort `returnByValue`)
+- `browser.query`
+  - params: `{ selector, targetId?, limit? }` → returns basic element summaries (tag/id/class/text/value/href/outerHTML)
+- `browser.dom`
+  - params: `{ format: "html"|"text", targetId?, selector?, maxChars? }` → returns a truncated dump (`text` field)
+- `browser.snapshot`
+  - params: `{ format: "aria"|"domSnapshot", targetId?, limit? }`
+  - `aria`: simplified Accessibility tree with `backendDOMNodeId` when available (future click/type hooks)
+  - `domSnapshot`: lightweight DOM walk snapshot (tree-ish, bounded by `limit`)
+
 Nice-to-have (later):
-- `browser.snapshot.aria` (AI-friendly snapshot with stable refs)
-- `browser.click` / `browser.type` / `browser.waitFor` helpers built atop snapshot refs
+- `browser.click` / `browser.type` / `browser.waitFor` helpers built atop snapshot refs / backend node ids
 
 ### “Is it open or closed?”
 

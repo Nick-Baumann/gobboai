@@ -2,9 +2,13 @@ import chalk from "chalk";
 import { Command } from "commander";
 import {
   browserCloseTab,
+  browserDom,
+  browserEval,
   browserFocusTab,
   browserOpenTab,
+  browserQuery,
   browserScreenshot,
+  browserSnapshot,
   browserStart,
   browserStatus,
   browserStop,
@@ -433,6 +437,10 @@ Examples:
   clawdis browser open https://example.com
   clawdis browser screenshot                # emits MEDIA:<path>
   clawdis browser screenshot <targetId> --full-page
+  clawdis browser eval "location.href"
+  clawdis browser query "a" --limit 5
+  clawdis browser dom --format text --max-chars 5000
+  clawdis browser snapshot --format aria --limit 200
 `,
     )
     .action(() => {
@@ -622,6 +630,232 @@ Examples:
         }
         // Print MEDIA: token so the agent can forward the image as an attachment.
         defaultRuntime.log(`MEDIA:${result.path}`);
+      } catch (err) {
+        defaultRuntime.error(danger(String(err)));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  browser
+    .command("eval")
+    .description("Evaluate JavaScript in the page context")
+    .argument("[js]", "JavaScript expression (or use --js-file/--js-stdin)")
+    .option("--target-id <id>", "CDP target id (or unique prefix)")
+    .option("--await", "Await promises (Runtime.evaluate awaitPromise)", false)
+    .option("--js-file <path>", "Read JavaScript from a file")
+    .option("--js-stdin", "Read JavaScript from stdin", false)
+    .action(async (jsArg: string | undefined, opts, cmd) => {
+      const parent = parentOpts(cmd);
+      const baseUrl = resolveBrowserControlUrl(parent?.url);
+
+      let js = jsArg?.trim() ?? "";
+      if (opts.jsFile && opts.jsStdin) {
+        defaultRuntime.error(danger("Use either --js-file or --js-stdin."));
+        defaultRuntime.exit(2);
+        return;
+      }
+      if (opts.jsFile) {
+        const fs = await import("node:fs/promises");
+        js = await fs.readFile(opts.jsFile, "utf8");
+      } else if (opts.jsStdin) {
+        js = await new Promise<string>((resolve, reject) => {
+          let buf = "";
+          process.stdin.setEncoding("utf8");
+          process.stdin.on("data", (c) => {
+            buf += c;
+          });
+          process.stdin.on("end", () => resolve(buf));
+          process.stdin.on("error", (e) => reject(e));
+        });
+      }
+
+      if (!js.trim()) {
+        defaultRuntime.error(
+          danger("Missing JavaScript. Pass <js> or use --js-file/--js-stdin."),
+        );
+        defaultRuntime.exit(2);
+        return;
+      }
+
+      try {
+        const result = await browserEval(baseUrl, {
+          js,
+          targetId: opts.targetId?.trim() || undefined,
+          awaitPromise: Boolean(opts.await),
+        });
+        if (parent?.json) {
+          defaultRuntime.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        const v = result.result;
+        if (Object.hasOwn(v, "value")) {
+          const value = (v as { value?: unknown }).value;
+          defaultRuntime.log(
+            typeof value === "string" ? value : JSON.stringify(value, null, 2),
+          );
+          return;
+        }
+        defaultRuntime.log(v.description ?? JSON.stringify(v, null, 2));
+      } catch (err) {
+        defaultRuntime.error(danger(String(err)));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  browser
+    .command("query")
+    .description("Query elements by CSS selector")
+    .argument("<selector>", "CSS selector")
+    .option("--target-id <id>", "CDP target id (or unique prefix)")
+    .option("--limit <n>", "Max matches (default: 20)", (v: string) =>
+      Number(v),
+    )
+    .option(
+      "--format <text|json>",
+      "Text output format (default: text)",
+      "text",
+    )
+    .action(async (selector: string, opts, cmd) => {
+      const parent = parentOpts(cmd);
+      const baseUrl = resolveBrowserControlUrl(parent?.url);
+      try {
+        const result = await browserQuery(baseUrl, {
+          selector,
+          targetId: opts.targetId?.trim() || undefined,
+          limit: Number.isFinite(opts.limit) ? opts.limit : undefined,
+        });
+        if (parent?.json || opts.format === "json") {
+          defaultRuntime.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        if (!result.matches.length) {
+          defaultRuntime.log("No matches.");
+          return;
+        }
+        defaultRuntime.log(
+          result.matches
+            .map((m) => {
+              const id = m.id ? `#${m.id}` : "";
+              const cls = m.className
+                ? `.${m.className
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .slice(0, 3)
+                    .join(".")}`
+                : "";
+              const head = `${m.index}. <${m.tag}${id}${cls}>`;
+              const text = m.text ? `\n   ${m.text}` : "";
+              return `${head}${text}`;
+            })
+            .join("\n"),
+        );
+      } catch (err) {
+        defaultRuntime.error(danger(String(err)));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  browser
+    .command("dom")
+    .description("Dump DOM (html or text) with truncation")
+    .option("--format <html|text>", "Output format (default: html)", "html")
+    .option("--target-id <id>", "CDP target id (or unique prefix)")
+    .option("--selector <css>", "Optional CSS selector to scope the dump")
+    .option(
+      "--max-chars <n>",
+      "Max characters (default: 200000)",
+      (v: string) => Number(v),
+    )
+    .option("--out <path>", "Write output to a file")
+    .action(async (opts, cmd) => {
+      const parent = parentOpts(cmd);
+      const baseUrl = resolveBrowserControlUrl(parent?.url);
+      const format = opts.format === "text" ? "text" : "html";
+      try {
+        const result = await browserDom(baseUrl, {
+          format,
+          targetId: opts.targetId?.trim() || undefined,
+          maxChars: Number.isFinite(opts.maxChars) ? opts.maxChars : undefined,
+          selector: opts.selector?.trim() || undefined,
+        });
+        if (opts.out) {
+          const fs = await import("node:fs/promises");
+          await fs.writeFile(opts.out, result.text, "utf8");
+          if (parent?.json) {
+            defaultRuntime.log(
+              JSON.stringify({ ok: true, out: opts.out }, null, 2),
+            );
+          } else {
+            defaultRuntime.log(opts.out);
+          }
+          return;
+        }
+        if (parent?.json) {
+          defaultRuntime.log(JSON.stringify(result, null, 2));
+          return;
+        }
+        defaultRuntime.log(result.text);
+      } catch (err) {
+        defaultRuntime.error(danger(String(err)));
+        defaultRuntime.exit(1);
+      }
+    });
+
+  browser
+    .command("snapshot")
+    .description("Capture an AI-friendly snapshot (aria or domSnapshot)")
+    .option(
+      "--format <aria|domSnapshot>",
+      "Snapshot format (default: aria)",
+      "aria",
+    )
+    .option("--target-id <id>", "CDP target id (or unique prefix)")
+    .option("--limit <n>", "Max nodes (default: 500/800)", (v: string) =>
+      Number(v),
+    )
+    .option("--out <path>", "Write JSON snapshot to a file")
+    .action(async (opts, cmd) => {
+      const parent = parentOpts(cmd);
+      const baseUrl = resolveBrowserControlUrl(parent?.url);
+      const format = opts.format === "domSnapshot" ? "domSnapshot" : "aria";
+      try {
+        const result = await browserSnapshot(baseUrl, {
+          format,
+          targetId: opts.targetId?.trim() || undefined,
+          limit: Number.isFinite(opts.limit) ? opts.limit : undefined,
+        });
+
+        const payload = JSON.stringify(result, null, 2);
+        if (opts.out) {
+          const fs = await import("node:fs/promises");
+          await fs.writeFile(opts.out, payload, "utf8");
+          if (parent?.json) {
+            defaultRuntime.log(
+              JSON.stringify({ ok: true, out: opts.out }, null, 2),
+            );
+          } else {
+            defaultRuntime.log(opts.out);
+          }
+          return;
+        }
+
+        if (parent?.json || format === "domSnapshot") {
+          defaultRuntime.log(payload);
+          return;
+        }
+
+        // aria text rendering
+        const nodes = "nodes" in result ? result.nodes : [];
+        defaultRuntime.log(
+          nodes
+            .map((n) => {
+              const indent = "  ".repeat(Math.min(20, n.depth));
+              const name = n.name ? ` "${n.name}"` : "";
+              const value = n.value ? ` = "${n.value}"` : "";
+              return `${indent}- ${n.role}${name}${value}`;
+            })
+            .join("\n"),
+        );
       } catch (err) {
         defaultRuntime.error(danger(String(err)));
         defaultRuntime.exit(1);

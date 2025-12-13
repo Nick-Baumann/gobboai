@@ -20,6 +20,15 @@ enum BrowserCLI {
         var overrideURL: String?
         var fullPage = false
         var targetId: String?
+        var awaitPromise = false
+        var js: String?
+        var jsFile: String?
+        var jsStdin = false
+        var selector: String?
+        var format: String?
+        var limit: Int?
+        var maxChars: Int?
+        var outPath: String?
         var rest: [String] = []
 
         while !args.isEmpty {
@@ -31,6 +40,24 @@ enum BrowserCLI {
                 fullPage = true
             case "--target-id":
                 targetId = args.popFirst()
+            case "--await":
+                awaitPromise = true
+            case "--js":
+                js = args.popFirst()
+            case "--js-file":
+                jsFile = args.popFirst()
+            case "--js-stdin":
+                jsStdin = true
+            case "--selector":
+                selector = args.popFirst()
+            case "--format":
+                format = args.popFirst()
+            case "--limit":
+                limit = args.popFirst().flatMap(Int.init)
+            case "--max-chars":
+                maxChars = args.popFirst().flatMap(Int.init)
+            case "--out":
+                outPath = args.popFirst()
             default:
                 rest.append(arg)
             }
@@ -142,6 +169,133 @@ enum BrowserCLI {
                     print("MEDIA:\(path)")
                 } else {
                     self.printResult(jsonOutput: false, res: res)
+                }
+                return 0
+
+            case "eval":
+                if jsStdin, jsFile != nil {
+                    self.printHelp()
+                    return 2
+                }
+
+                let code: String = try {
+                    if let jsFile, !jsFile.isEmpty {
+                        return try String(contentsOfFile: jsFile, encoding: .utf8)
+                    }
+                    if jsStdin {
+                        let data = FileHandle.standardInput.readDataToEndOfFile()
+                        return String(data: data, encoding: .utf8) ?? ""
+                    }
+                    if let js, !js.isEmpty { return js }
+                    if !rest.isEmpty { return rest.joined(separator: " ") }
+                    return ""
+                }()
+
+                if code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    self.printHelp()
+                    return 2
+                }
+
+                let res = try await self.httpJSON(
+                    method: "POST",
+                    url: baseURL.appendingPathComponent("/eval"),
+                    body: [
+                        "js": code,
+                        "targetId": targetId ?? "",
+                        "await": awaitPromise,
+                    ],
+                    timeoutInterval: 15.0)
+
+                if jsonOutput {
+                    self.printJSON(ok: true, result: res)
+                } else {
+                    self.printEval(res: res)
+                }
+                return 0
+
+            case "query":
+                let sel = (selector ?? rest.first ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if sel.isEmpty {
+                    self.printHelp()
+                    return 2
+                }
+                var url = baseURL.appendingPathComponent("/query")
+                var items: [URLQueryItem] = [URLQueryItem(name: "selector", value: sel)]
+                if let targetId, !targetId.isEmpty {
+                    items.append(URLQueryItem(name: "targetId", value: targetId))
+                }
+                if let limit, limit > 0 {
+                    items.append(URLQueryItem(name: "limit", value: String(limit)))
+                }
+                url = self.withQuery(url, items: items)
+                let res = try await self.httpJSON(method: "GET", url: url, timeoutInterval: 15.0)
+                if jsonOutput || format == "json" {
+                    self.printJSON(ok: true, result: res)
+                } else {
+                    self.printQuery(res: res)
+                }
+                return 0
+
+            case "dom":
+                let fmt = (format == "text") ? "text" : "html"
+                var url = baseURL.appendingPathComponent("/dom")
+                var items: [URLQueryItem] = [URLQueryItem(name: "format", value: fmt)]
+                if let targetId, !targetId.isEmpty {
+                    items.append(URLQueryItem(name: "targetId", value: targetId))
+                }
+                if let selector = selector?.trimmingCharacters(in: .whitespacesAndNewlines), !selector.isEmpty {
+                    items.append(URLQueryItem(name: "selector", value: selector))
+                }
+                if let maxChars, maxChars > 0 {
+                    items.append(URLQueryItem(name: "maxChars", value: String(maxChars)))
+                }
+                url = self.withQuery(url, items: items)
+                let res = try await self.httpJSON(method: "GET", url: url, timeoutInterval: 20.0)
+                let text = (res["text"] as? String) ?? ""
+                if let out = outPath, !out.isEmpty {
+                    try Data(text.utf8).write(to: URL(fileURLWithPath: out))
+                    if jsonOutput {
+                        self.printJSON(ok: true, result: ["ok": true, "out": out])
+                    } else {
+                        print(out)
+                    }
+                    return 0
+                }
+                if jsonOutput {
+                    self.printJSON(ok: true, result: res)
+                } else {
+                    print(text)
+                }
+                return 0
+
+            case "snapshot":
+                let fmt = (format == "domSnapshot") ? "domSnapshot" : "aria"
+                var url = baseURL.appendingPathComponent("/snapshot")
+                var items: [URLQueryItem] = [URLQueryItem(name: "format", value: fmt)]
+                if let targetId, !targetId.isEmpty {
+                    items.append(URLQueryItem(name: "targetId", value: targetId))
+                }
+                if let limit, limit > 0 {
+                    items.append(URLQueryItem(name: "limit", value: String(limit)))
+                }
+                url = self.withQuery(url, items: items)
+                let res = try await self.httpJSON(method: "GET", url: url, timeoutInterval: 20.0)
+
+                if let out = outPath, !out.isEmpty {
+                    let data = try JSONSerialization.data(withJSONObject: res, options: [.prettyPrinted])
+                    try data.write(to: URL(fileURLWithPath: out))
+                    if jsonOutput {
+                        self.printJSON(ok: true, result: ["ok": true, "out": out])
+                    } else {
+                        print(out)
+                    }
+                    return 0
+                }
+
+                if jsonOutput || fmt == "domSnapshot" {
+                    self.printJSON(ok: true, result: res)
+                } else {
+                    self.printSnapshotAria(res: res)
                 }
                 return 0
 
@@ -295,6 +449,74 @@ enum BrowserCLI {
         }
     }
 
+    private static func printEval(res: [String: Any]) {
+        guard let obj = res["result"] as? [String: Any] else {
+            self.printResult(jsonOutput: false, res: res)
+            return
+        }
+
+        if let value = obj["value"] {
+            if JSONSerialization.isValidJSONObject(value),
+               let data = try? JSONSerialization.data(withJSONObject: value, options: [.prettyPrinted]),
+               let text = String(data: data, encoding: .utf8)
+            {
+                print(text)
+            } else {
+                print(String(describing: value))
+            }
+            return
+        }
+
+        if let desc = obj["description"] as? String, !desc.isEmpty {
+            print(desc)
+            return
+        }
+
+        self.printResult(jsonOutput: false, res: obj)
+    }
+
+    private static func printQuery(res: [String: Any]) {
+        guard let matches = res["matches"] as? [[String: Any]] else {
+            self.printResult(jsonOutput: false, res: res)
+            return
+        }
+        if matches.isEmpty {
+            print("No matches.")
+            return
+        }
+        for m in matches {
+            let index = (m["index"] as? Int) ?? 0
+            let tag = (m["tag"] as? String) ?? ""
+            let id = (m["id"] as? String).map { "#\($0)" } ?? ""
+            let className = (m["className"] as? String) ?? ""
+            let classes = className.split(separator: " ").prefix(3).map(String.init)
+            let cls = classes.isEmpty ? "" : "." + classes.joined(separator: ".")
+            let head = "\(index). <\(tag)\(id)\(cls)>"
+            print(head)
+            if let text = m["text"] as? String, !text.isEmpty {
+                print("   \(text)")
+            }
+        }
+    }
+
+    private static func printSnapshotAria(res: [String: Any]) {
+        guard let nodes = res["nodes"] as? [[String: Any]] else {
+            self.printResult(jsonOutput: false, res: res)
+            return
+        }
+        for n in nodes {
+            let depth = (n["depth"] as? Int) ?? 0
+            let role = (n["role"] as? String) ?? "unknown"
+            let name = (n["name"] as? String) ?? ""
+            let value = (n["value"] as? String) ?? ""
+            let indent = String(repeating: "  ", count: min(depth, 20))
+            var line = "\(indent)- \(role)"
+            if !name.isEmpty { line += " \"\(name)\"" }
+            if !value.isEmpty { line += " = \"\(value)\"" }
+            print(line)
+        }
+    }
+
 #if SWIFT_PACKAGE
     static func _testFormatTabs(res: [String: Any]) -> [String] {
         self.formatTabs(res: res)
@@ -325,6 +547,14 @@ enum BrowserCLI {
           clawdis-mac browser focus <targetId> [--url <...>]
           clawdis-mac browser close <targetId> [--url <...>]
           clawdis-mac browser screenshot [--target-id <id>] [--full-page] [--url <...>]
+          clawdis-mac browser eval [<js>] [--js <js>] [--js-file <path>] [--js-stdin]
+            [--target-id <id>] [--await] [--url <...>]
+          clawdis-mac browser query <selector> [--limit <n>] [--format <text|json>]
+            [--target-id <id>] [--url <...>]
+          clawdis-mac browser dom [--format <html|text>] [--selector <css>] [--max-chars <n>]
+            [--out <path>] [--target-id <id>] [--url <...>]
+          clawdis-mac browser snapshot [--format <aria|domSnapshot>] [--limit <n>] [--out <path>]
+            [--target-id <id>] [--url <...>]
 
         Notes:
           - Config defaults come from ~/.clawdis/clawdis.json (browser.enabled, browser.controlUrl).
