@@ -412,7 +412,7 @@ struct ClawdisCLI {
             clawdis-mac canvas snapshot [--out <path>] [--session <key>]
 
           Browser (clawd):
-            clawdis-mac browser status|start|stop|tabs|open|focus|close|screenshot
+            clawdis-mac browser status|start|stop|tabs|open|focus|close|screenshot|eval|query|dom|snapshot
 
         Browser notes:
           - Uses clawd’s dedicated Chrome/Chromium profile (separate user-data dir).
@@ -426,6 +426,10 @@ struct ClawdisCLI {
           clawdis-mac browser open https://example.com
           clawdis-mac browser tabs
           clawdis-mac browser screenshot --full-page
+          clawdis-mac browser eval \"location.href\"
+          clawdis-mac browser query \"a\" --limit 5
+          clawdis-mac browser dom --format text --max-chars 5000
+          clawdis-mac browser snapshot --format aria --limit 200
 
         Output:
           Default output is text. Use --json for machine-readable output.
