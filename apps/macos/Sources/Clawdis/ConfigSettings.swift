@@ -47,7 +47,7 @@ struct ConfigSettings: View {
                                     Text("Manual entry…").tag("__custom__")
                                 }
                                 .labelsHidden()
-                                .frame(width: 360)
+                                .frame(maxWidth: .infinity)
                                 .disabled(self.modelsLoading || (!self.modelError.isNilOrEmpty && self.models.isEmpty))
                                 .onChange(of: self.configModel) { _, _ in
                                     self.autosaveConfig()
@@ -56,7 +56,7 @@ struct ConfigSettings: View {
                                 if self.configModel == "__custom__" {
                                     TextField("Enter model ID", text: self.$customModel)
                                         .textFieldStyle(.roundedBorder)
-                                        .frame(width: 360)
+                                        .frame(maxWidth: .infinity)
                                         .onChange(of: self.customModel) { _, newValue in
                                             self.configModel = newValue
                                             self.autosaveConfig()
@@ -77,8 +77,8 @@ struct ConfigSettings: View {
                             }
                         }
                     }
-                    .frame(maxWidth: 520, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 GroupBox("Heartbeat") {
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
@@ -99,7 +99,7 @@ struct ConfigSettings: View {
 
                                     TextField("HEARTBEAT", text: self.$heartbeatBody)
                                         .textFieldStyle(.roundedBorder)
-                                        .frame(width: 200)
+                                        .frame(maxWidth: .infinity)
                                         .onChange(of: self.heartbeatBody) { _, _ in
                                             self.autosaveConfig()
                                         }
@@ -111,8 +111,8 @@ struct ConfigSettings: View {
                             }
                         }
                     }
-                    .frame(maxWidth: 520, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 GroupBox("Web Chat") {
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
@@ -139,11 +139,11 @@ struct ConfigSettings: View {
                                 """)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
-                                .frame(maxWidth: 360, alignment: .leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .frame(maxWidth: 520, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 GroupBox("Browser (clawd)") {
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
@@ -158,7 +158,7 @@ struct ConfigSettings: View {
                             self.gridLabel("Control URL")
                             TextField("http://127.0.0.1:18791", text: self.$browserControlUrl)
                                 .textFieldStyle(.roundedBorder)
-                                .frame(width: 360)
+                                .frame(maxWidth: .infinity)
                                 .disabled(!self.browserEnabled)
                                 .onChange(of: self.browserControlUrl) { _, _ in self.autosaveConfig() }
                         }
@@ -196,11 +196,11 @@ struct ConfigSettings: View {
                             )
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                            .frame(maxWidth: 360, alignment: .leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    .frame(maxWidth: 520, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer(minLength: 0)
             }
