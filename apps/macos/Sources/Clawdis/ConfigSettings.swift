@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct ConfigSettings: View {
     private let isPreview = ProcessInfo.processInfo.isPreview
+    private let labelColumnWidth: CGFloat = 120
     @State private var configModel: String = ""
     @State private var customModel: String = ""
     @State private var configSaving = false
@@ -25,161 +26,187 @@ struct ConfigSettings: View {
     @State private var browserAttachOnly: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Clawdis CLI config")
-                .font(.title3.weight(.semibold))
-            Text("Edit ~/.clawdis/clawdis.json (inbound.reply.agent/session).")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-
-            LabeledContent("Model") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Picker("Model", selection: self.$configModel) {
-                        ForEach(self.models) { choice in
-                            Text(
-                                "\(choice.name) — \(choice.provider.uppercased())")
-                                .tag(choice.id)
-                        }
-                        Text("Manual entry…").tag("__custom__")
-                    }
-                    .labelsHidden()
-                    .frame(width: 360)
-                    .disabled(self.modelsLoading || (!self.modelError.isNilOrEmpty && self.models.isEmpty))
-                    .onChange(of: self.configModel) { _, _ in
-                        self.autosaveConfig()
-                    }
-
-                    if self.configModel == "__custom__" {
-                        TextField("Enter model ID", text: self.$customModel)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 320)
-                            .onChange(of: self.customModel) { _, newValue in
-                                self.configModel = newValue
-                                self.autosaveConfig()
-                            }
-                    }
-
-                    if let contextLabel = self.selectedContextLabel {
-                        Text(contextLabel)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if let modelError {
-                        Text(modelError)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            LabeledContent("Heartbeat") {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 12) {
-                        Stepper(
-                            value: Binding(
-                                get: { self.heartbeatMinutes ?? 10 },
-                                set: { self.heartbeatMinutes = $0; self.autosaveConfig() }),
-                            in: 0...720)
-                        {
-                            Text("Every \(self.heartbeatMinutes ?? 10) min")
-                        }
-                        .help("Set to 0 to disable automatic heartbeats")
-
-                        TextField("HEARTBEAT", text: self.$heartbeatBody)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 240)
-                            .onChange(of: self.heartbeatBody) { _, _ in
-                                self.autosaveConfig()
-                            }
-                            .help("Message body sent on each heartbeat")
-                    }
-
-                    Text("Heartbeats keep Pi sessions warm; 0 minutes disables them.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Divider().padding(.vertical, 4)
-
-            LabeledContent("Web chat") {
-                VStack(alignment: .leading, spacing: 6) {
-                    Toggle("Enable embedded web chat (loopback only)", isOn: self.$webChatEnabled)
-                        .toggleStyle(.switch)
-                        .frame(width: 320, alignment: .leading)
-                    HStack(spacing: 8) {
-                        Text("Port")
-                        TextField("18788", value: self.$webChatPort, formatter: NumberFormatter())
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 100)
-                            .disabled(!self.webChatEnabled)
-                    }
-                    Text(
-                        """
-                        Mac app connects to the gateway’s loopback web chat on this port.
-                        Remote mode uses SSH -L to forward it.
-                        """)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: 480, alignment: .leading)
-                }
-            }
-
-            Divider().padding(.vertical, 4)
-
-            LabeledContent("Browser (clawd)") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Toggle("Enable clawd browser control", isOn: self.$browserEnabled)
-                        .toggleStyle(.switch)
-                        .frame(width: 360, alignment: .leading)
-                        .onChange(of: self.browserEnabled) { _, _ in self.autosaveConfig() }
-
-                    HStack(spacing: 8) {
-                        Text("Control URL")
-                        TextField("http://127.0.0.1:18791", text: self.$browserControlUrl)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 320)
-                            .disabled(!self.browserEnabled)
-                            .onChange(of: self.browserControlUrl) { _, _ in self.autosaveConfig() }
-                    }
-
-                    HStack(spacing: 8) {
-                        Text("Accent")
-                        TextField("#FF4500", text: self.$browserColorHex)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 120)
-                            .disabled(!self.browserEnabled)
-                            .onChange(of: self.browserColorHex) { _, _ in self.autosaveConfig() }
-                        Circle()
-                            .fill(self.browserColor)
-                            .frame(width: 12, height: 12)
-                            .overlay(Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 1))
-                        Text("lobster-orange")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Toggle("Attach only (never launch)", isOn: self.$browserAttachOnly)
-                        .toggleStyle(.switch)
-                        .frame(width: 360, alignment: .leading)
-                        .disabled(!self.browserEnabled)
-                        .onChange(of: self.browserAttachOnly) { _, _ in self.autosaveConfig() }
-                        .help("When enabled, the browser server will only connect if the clawd browser is already running.")
-
-                    Text(
-                        "Clawd uses a separate Chrome profile and ports (default 18791/18792) so it won’t interfere with your daily browser."
-                    )
-                    .font(.footnote)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Clawdis CLI config")
+                    .font(.title3.weight(.semibold))
+                Text("Edit ~/.clawdis/clawdis.json (inbound.reply.agent/session).")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
-                    .frame(maxWidth: 480, alignment: .leading)
-                }
-            }
 
-            Spacer()
+                GroupBox("Agent") {
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+                        GridRow {
+                            self.gridLabel("Model")
+                            VStack(alignment: .leading, spacing: 6) {
+                                Picker("Model", selection: self.$configModel) {
+                                    ForEach(self.models) { choice in
+                                        Text("\(choice.name) — \(choice.provider.uppercased())")
+                                            .tag(choice.id)
+                                    }
+                                    Text("Manual entry…").tag("__custom__")
+                                }
+                                .labelsHidden()
+                                .frame(width: 360)
+                                .disabled(self.modelsLoading || (!self.modelError.isNilOrEmpty && self.models.isEmpty))
+                                .onChange(of: self.configModel) { _, _ in
+                                    self.autosaveConfig()
+                                }
+
+                                if self.configModel == "__custom__" {
+                                    TextField("Enter model ID", text: self.$customModel)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 360)
+                                        .onChange(of: self.customModel) { _, newValue in
+                                            self.configModel = newValue
+                                            self.autosaveConfig()
+                                        }
+                                }
+
+                                if let contextLabel = self.selectedContextLabel {
+                                    Text(contextLabel)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if let modelError {
+                                    Text(modelError)
+                                        .font(.footnote)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 520, alignment: .leading)
+                }
+
+                GroupBox("Heartbeat") {
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+                        GridRow {
+                            self.gridLabel("Schedule")
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack(spacing: 12) {
+                                    Stepper(
+                                        value: Binding(
+                                            get: { self.heartbeatMinutes ?? 10 },
+                                            set: { self.heartbeatMinutes = $0; self.autosaveConfig() }),
+                                        in: 0...720)
+                                    {
+                                        Text("Every \(self.heartbeatMinutes ?? 10) min")
+                                            .frame(width: 150, alignment: .leading)
+                                    }
+                                    .help("Set to 0 to disable automatic heartbeats")
+
+                                    TextField("HEARTBEAT", text: self.$heartbeatBody)
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(width: 200)
+                                        .onChange(of: self.heartbeatBody) { _, _ in
+                                            self.autosaveConfig()
+                                        }
+                                        .help("Message body sent on each heartbeat")
+                                }
+                                Text("Heartbeats keep Pi sessions warm; 0 minutes disables them.")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: 520, alignment: .leading)
+                }
+
+                GroupBox("Web Chat") {
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+                        GridRow {
+                            self.gridLabel("Enabled")
+                            Toggle("", isOn: self.$webChatEnabled)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                        }
+                        GridRow {
+                            self.gridLabel("Port")
+                            TextField("18788", value: self.$webChatPort, formatter: NumberFormatter())
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 100)
+                                .disabled(!self.webChatEnabled)
+                        }
+                        GridRow {
+                            Color.clear
+                                .frame(width: self.labelColumnWidth, height: 1)
+                            Text(
+                                """
+                                Mac app connects to the gateway’s loopback web chat on this port.
+                                Remote mode uses SSH -L to forward it.
+                                """)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: 360, alignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: 520, alignment: .leading)
+                }
+
+                GroupBox("Browser (clawd)") {
+                    Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+                        GridRow {
+                            self.gridLabel("Enabled")
+                            Toggle("", isOn: self.$browserEnabled)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .onChange(of: self.browserEnabled) { _, _ in self.autosaveConfig() }
+                        }
+                        GridRow {
+                            self.gridLabel("Control URL")
+                            TextField("http://127.0.0.1:18791", text: self.$browserControlUrl)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(width: 360)
+                                .disabled(!self.browserEnabled)
+                                .onChange(of: self.browserControlUrl) { _, _ in self.autosaveConfig() }
+                        }
+                        GridRow {
+                            self.gridLabel("Accent")
+                            HStack(spacing: 8) {
+                                TextField("#FF4500", text: self.$browserColorHex)
+                                    .textFieldStyle(.roundedBorder)
+                                    .frame(width: 120)
+                                    .disabled(!self.browserEnabled)
+                                    .onChange(of: self.browserColorHex) { _, _ in self.autosaveConfig() }
+                                Circle()
+                                    .fill(self.browserColor)
+                                    .frame(width: 12, height: 12)
+                                    .overlay(Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 1))
+                                Text("lobster-orange")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        GridRow {
+                            self.gridLabel("Attach only")
+                            Toggle("", isOn: self.$browserAttachOnly)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .disabled(!self.browserEnabled)
+                                .onChange(of: self.browserAttachOnly) { _, _ in self.autosaveConfig() }
+                                .help("When enabled, the browser server will only connect if the clawd browser is already running.")
+                        }
+                        GridRow {
+                            Color.clear
+                                .frame(width: self.labelColumnWidth, height: 1)
+                            Text(
+                                "Clawd uses a separate Chrome profile and ports (default 18791/18792) so it won’t interfere with your daily browser."
+                            )
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: 360, alignment: .leading)
+                        }
+                    }
+                    .frame(maxWidth: 520, alignment: .leading)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
         .onChange(of: self.modelCatalogPath) { _, _ in
             Task { await self.loadModels() }
         }
@@ -194,6 +221,12 @@ struct ConfigSettings: View {
             await self.loadModels()
             self.allowAutosave = true
         }
+    }
+
+    private func gridLabel(_ text: String) -> some View {
+        Text(text)
+            .foregroundStyle(.secondary)
+            .frame(width: self.labelColumnWidth, alignment: .leading)
     }
 
     private func loadConfig() {
