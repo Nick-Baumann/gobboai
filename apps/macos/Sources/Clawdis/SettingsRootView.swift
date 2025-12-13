@@ -32,13 +32,6 @@ struct SettingsRootView: View {
                 .tabItem { Label("Instances", systemImage: "network") }
                 .tag(SettingsTab.instances)
 
-            PermissionsSettings(
-                status: self.permissionMonitor.status,
-                refresh: self.refreshPerms,
-                showOnboarding: { OnboardingController.shared.show() })
-                .tabItem { Label("Permissions", systemImage: "lock.shield") }
-                .tag(SettingsTab.permissions)
-
             SessionsSettings()
                 .tabItem { Label("Sessions", systemImage: "clock.arrow.circlepath") }
                 .tag(SettingsTab.sessions)
@@ -46,6 +39,13 @@ struct SettingsRootView: View {
             ToolsSettings()
                 .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
                 .tag(SettingsTab.tools)
+
+            PermissionsSettings(
+                status: self.permissionMonitor.status,
+                refresh: self.refreshPerms,
+                showOnboarding: { OnboardingController.shared.show() })
+                .tabItem { Label("Permissions", systemImage: "lock.shield") }
+                .tag(SettingsTab.permissions)
 
             if self.state.debugPaneEnabled {
                 DebugSettings()
