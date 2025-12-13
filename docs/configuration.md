@@ -118,7 +118,7 @@ Cron is a Gateway-owned scheduler for wakeups and scheduled jobs. See `docs/cron
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable the cron scheduler inside the Gateway |
+| `enabled` | boolean | `true` | Enable the cron scheduler inside the Gateway (set to `false` to disable) |
 | `store` | string | *(auto)* | Override the cron job store path (defaults to `~/.clawdis/cron/jobs.json` if present, otherwise `~/.clawdis/cron.json`) |
 | `maxConcurrentRuns` | number | `1` | Max concurrent isolated cron runs (command-queue lane `"cron"`) |
 
