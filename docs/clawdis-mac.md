@@ -14,7 +14,7 @@ Author: steipete · Status: draft spec · Date: 2025-12-05
   - Owns TCC prompts (Notifications, Accessibility, Screen Recording, Automation/AppleScript, Microphone, Speech Recognition).
   - Brokers privileged actions via local IPC:
     - Clawdis control socket (app-specific actions like notify/run)
-    - PeekabooBridge socket (`bridge.sock`) for UI automation (see `docs/mac/peekaboo.md`)
+    - PeekabooBridge socket (`bridge.sock`) for UI automation brokering (consumed by `peekaboo`; see `docs/mac/peekaboo.md`)
   - Provides a tiny CLI (`clawdis-mac`) that talks to the app; Node/TS shells out to it.
 - Replace the separate notifier helper pattern (Oracle) with a built-in notifier.
 - Offer a first-run experience similar to VibeTunnel’s onboarding (permissions + CLI install).
@@ -47,7 +47,7 @@ struct Response { ok: Bool; message?: String; payload?: Data }
 - The control-socket server rejects oversize/unknown cases and validates the caller by code signature TeamID (with a `DEBUG`-only same-UID escape hatch controlled by `CLAWDIS_ALLOW_UNSIGNED_SOCKET_CLIENTS=1`).
 
 UI automation is not part of `ClawdisIPC.Request`:
-- `clawdis-mac ui …` speaks **PeekabooBridge** (see `docs/mac/peekaboo.md`).
+- UI automation is handled via the separate PeekabooBridge socket and is surfaced by the `peekaboo` CLI (see `docs/mac/peekaboo.md`).
 
 ## App UX (Clawdis)
 - MenuBarExtra icon only (LSUIElement; no Dock).
@@ -71,15 +71,7 @@ UI automation is not part of `ClawdisIPC.Request`:
 - Subcommands (text by default; `--json` for machine output; non-zero exit on failure):
   - `notify --title --body [--sound] [--priority passive|active|timeSensitive] [--delivery system|overlay|auto]`
   - `ensure-permissions --cap accessibility --cap screenRecording [--interactive]`
-  - `ui permissions status`
-  - `ui frontmost`
-  - `ui apps`
-  - `ui windows [--bundle-id <id>]`
-  - `ui screenshot [--screen-index <n>] [--bundle-id <id>] [--window-index <n>] [--watch] [--scale native|1x]`
-  - `ui see [--bundle-id <id>] [--window-index <n>] [--snapshot-id <id>]`
-  - `ui click --on <elementId> [--bundle-id <id>] [--snapshot-id <id>] [--double|--right]`
-  - `ui type --text <value> [--into <elementId>] [--bundle-id <id>] [--snapshot-id <id>] [--clear] [--delay-ms <n>]`
-  - `ui wait --on <elementId> [--bundle-id <id>] [--snapshot-id <id>] [--timeout <sec>]`
+  - UI automation + capture: use `peekaboo …` (Clawdis hosts PeekabooBridge; see `docs/mac/peekaboo.md`)
   - `run -- cmd args... [--cwd] [--env KEY=VAL] [--timeout 30] [--needs-screen-recording]`
   - `status`
 - Sounds: supply any macOS alert name with `--sound` per notification; omit the flag to use the system default. There is no longer a persisted “default sound” in the app UI.
@@ -87,14 +79,14 @@ UI automation is not part of `ClawdisIPC.Request`:
 - Delivery: `overlay` and `auto` show an in-app toast panel (bypasses Notification Center/Focus).
 - Internals:
   - For app-specific commands (`notify`, `ensure-permissions`, `run`, `status`): build `ClawdisIPC.Request`, send over the control socket.
-  - For UI automation (`ui …`): connect to PeekabooBridge hosts (Peekaboo.app → Clawdis.app) and send one JSON request per command (see `docs/mac/peekaboo.md`).
+  - UI automation is intentionally not exposed via `clawdis-mac`; it lives behind PeekabooBridge and is surfaced by the `peekaboo` CLI.
 
 ## Integration with clawdis/Clawdis (Node/TS)
 - Add helper module that shells to `clawdis-mac`:
   - Prefer `ensure-permissions` before actions that need TCC.
   - Use `notify` for desktop toasts; fall back to JS notifier only if CLI missing or platform ≠ macOS.
   - Use `run` for tasks requiring privileged UI context (screen-recorded terminal runs, etc.).
-  - For UI automation, `clawdis ui …` is a convenience passthrough to `clawdis-mac ui …` (text by default; add `--json` to the outer `clawdis` command for structured output).
+  - For UI automation, shell out to `peekaboo …` (text by default; add `--json` for structured output) and rely on PeekabooBridge host selection (Peekaboo.app → Clawdis.app → local).
 
 ## Deep links (URL scheme)
 
