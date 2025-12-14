@@ -2,7 +2,8 @@
 
 ## 2.0.0 — Unreleased
 
-_No changes since 2.0.0-beta1._
+### Bug Fixes
+- macOS: Voice Wake / push-to-talk no longer initialize `AVAudioEngine` at app launch, preventing Bluetooth headphones from switching into headset profile when voice features are unused. (Thanks @Nachx639)
 
 ## 2.0.0-beta1 — 2025-12-14
 
