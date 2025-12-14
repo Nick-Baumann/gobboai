@@ -63,7 +63,19 @@ struct OnboardingView: View {
     private let contentHeight: CGFloat = 520
     private let connectionPageIndex = 1
     private let permissionsPageIndex = 3
-    private var pageCount: Int { 8 }
+    private var pageOrder: [Int] {
+        if self.state.connectionMode == .remote {
+            // Remote setup doesn't need local gateway/CLI/workspace setup pages.
+            return [0, 1, 3, 6, 7]
+        }
+        return [0, 1, 2, 3, 4, 5, 6, 7]
+    }
+
+    private var pageCount: Int { self.pageOrder.count }
+    private var activePageIndex: Int {
+        self.activePageIndex(for: self.currentPage)
+    }
+
     private var buttonTitle: String { self.currentPage == self.pageCount - 1 ? "Finish" : "Next" }
     private let devLinkCommand = "ln -sf $(pwd)/apps/macos/.build/debug/ClawdisCLI /usr/local/bin/clawdis-mac"
 
@@ -95,7 +107,7 @@ struct OnboardingView: View {
                     self.whatsappPage().frame(width: self.pageWidth)
                     self.readyPage().frame(width: self.pageWidth)
                 }
-                .offset(x: CGFloat(-self.currentPage) * self.pageWidth)
+                .offset(x: CGFloat(-self.activePageIndex) * self.pageWidth)
                 .animation(
                     .interactiveSpring(response: 0.5, dampingFraction: 0.86, blendDuration: 0.25),
                     value: self.currentPage)
@@ -113,10 +125,12 @@ struct OnboardingView: View {
             self.updateMonitoring(for: 0)
         }
         .onChange(of: self.currentPage) { _, newValue in
-            self.updateMonitoring(for: newValue)
+            self.updateMonitoring(for: self.activePageIndex(for: newValue))
         }
         .onChange(of: self.state.connectionMode) { _, _ in
-            self.updateDiscoveryMonitoring(for: self.currentPage)
+            let oldActive = self.activePageIndex
+            self.reconcilePageForModeChange(previousActivePageIndex: oldActive)
+            self.updateDiscoveryMonitoring(for: self.activePageIndex)
         }
         .onDisappear {
             self.stopPermissionMonitoring()
@@ -128,6 +142,24 @@ struct OnboardingView: View {
             self.refreshGatewayStatus()
             self.loadWorkspaceDefaults()
         }
+    }
+
+    private func activePageIndex(for pageCursor: Int) -> Int {
+        guard !self.pageOrder.isEmpty else { return 0 }
+        let clamped = min(max(0, pageCursor), self.pageOrder.count - 1)
+        return self.pageOrder[clamped]
+    }
+
+    private func reconcilePageForModeChange(previousActivePageIndex: Int) {
+        if let exact = self.pageOrder.firstIndex(of: previousActivePageIndex) {
+            withAnimation { self.currentPage = exact }
+            return
+        }
+        if let next = self.pageOrder.firstIndex(where: { $0 > previousActivePageIndex }) {
+            withAnimation { self.currentPage = next }
+            return
+        }
+        withAnimation { self.currentPage = max(0, self.pageOrder.count - 1) }
     }
 
     private func welcomePage() -> some View {
