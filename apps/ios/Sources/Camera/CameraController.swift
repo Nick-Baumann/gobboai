@@ -36,6 +36,7 @@ actor CameraController {
         height: Int)
     {
         let facing = params.facing ?? .front
+        let format = params.format ?? .jpg
         // Default to a reasonable max width to keep bridge payload sizes manageable.
         // If you need the full-res photo, explicitly request a larger maxWidth.
         let maxWidth = params.maxWidth.flatMap { $0 > 0 ? $0 : nil } ?? 1600
@@ -74,9 +75,13 @@ actor CameraController {
         }()
         settings.photoQualityPrioritization = .quality
 
+        var delegate: PhotoCaptureDelegate?
         let rawData: Data = try await withCheckedThrowingContinuation { cont in
-            output.capturePhoto(with: settings, delegate: PhotoCaptureDelegate(cont))
+            let d = PhotoCaptureDelegate(cont)
+            delegate = d
+            output.capturePhoto(with: settings, delegate: d)
         }
+        withExtendedLifetime(delegate) {}
 
         let res = try JPEGTranscoder.transcodeToJPEG(
             imageData: rawData,
@@ -84,7 +89,7 @@ actor CameraController {
             quality: quality)
 
         return (
-            format: "jpg",
+            format: format.rawValue,
             base64: res.data.base64EncodedString(),
             width: res.widthPx,
             height: res.heightPx)
@@ -99,6 +104,7 @@ actor CameraController {
         let facing = params.facing ?? .front
         let durationMs = Self.clampDurationMs(params.durationMs)
         let includeAudio = params.includeAudio ?? true
+        let format = params.format ?? .mp4
 
         try await self.ensureAccess(for: .video)
         if includeAudio {
@@ -149,16 +155,23 @@ actor CameraController {
             try? FileManager.default.removeItem(at: mp4URL)
         }
 
+        var delegate: MovieFileDelegate?
         let recordedURL: URL = try await withCheckedThrowingContinuation { cont in
-            let delegate = MovieFileDelegate(cont)
-            output.startRecording(to: movURL, recordingDelegate: delegate)
+            let d = MovieFileDelegate(cont)
+            delegate = d
+            output.startRecording(to: movURL, recordingDelegate: d)
         }
+        withExtendedLifetime(delegate) {}
 
         // Transcode .mov -> .mp4 for easier downstream handling.
         try await Self.exportToMP4(inputURL: recordedURL, outputURL: mp4URL)
 
         let data = try Data(contentsOf: mp4URL)
-        return (format: "mp4", base64: data.base64EncodedString(), durationMs: durationMs, hasAudio: includeAudio)
+        return (
+            format: format.rawValue,
+            base64: data.base64EncodedString(),
+            durationMs: durationMs,
+            hasAudio: includeAudio)
     }
 
     private func ensureAccess(for mediaType: AVMediaType) async throws {
@@ -184,7 +197,11 @@ actor CameraController {
 
     private nonisolated static func pickCamera(facing: ClawdisCameraFacing) -> AVCaptureDevice? {
         let position: AVCaptureDevice.Position = (facing == .front) ? .front : .back
-        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+        if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) {
+            return device
+        }
+        // Fall back to any default camera (e.g. simulator / unusual device configurations).
+        return AVCaptureDevice.default(for: .video)
     }
 
     nonisolated static func clampQuality(_ quality: Double?) -> Double {
