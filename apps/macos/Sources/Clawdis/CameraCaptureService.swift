@@ -70,9 +70,13 @@ actor CameraCaptureService {
         }()
         settings.photoQualityPrioritization = .quality
 
+        var delegate: PhotoCaptureDelegate?
         let rawData: Data = try await withCheckedThrowingContinuation(isolation: nil) { cont in
-            output.capturePhoto(with: settings, delegate: PhotoCaptureDelegate(cont))
+            let d = PhotoCaptureDelegate(cont)
+            delegate = d
+            output.capturePhoto(with: settings, delegate: d)
         }
+        withExtendedLifetime(delegate) {}
 
         let res = try JPEGTranscoder.transcodeToJPEG(imageData: rawData, maxWidthPx: maxWidth, quality: quality)
         return (data: res.data, size: CGSize(width: res.widthPx, height: res.heightPx))
@@ -141,9 +145,13 @@ actor CameraCaptureService {
         try? FileManager.default.removeItem(at: outputURL)
 
         let logger = self.logger
+        var delegate: MovieFileDelegate?
         let recordedURL: URL = try await withCheckedThrowingContinuation(isolation: nil) { cont in
-            output.startRecording(to: tmpMovURL, recordingDelegate: MovieFileDelegate(cont, logger: logger))
+            let d = MovieFileDelegate(cont, logger: logger)
+            delegate = d
+            output.startRecording(to: tmpMovURL, recordingDelegate: d)
         }
+        withExtendedLifetime(delegate) {}
 
         try await Self.exportToMP4(inputURL: recordedURL, outputURL: outputURL)
         return (path: outputURL.path, durationMs: durationMs, hasAudio: includeAudio)
@@ -217,9 +225,9 @@ actor CameraCaptureService {
             export.outputURL = outputURL
             export.outputFileType = .mp4
 
-            await withCheckedContinuation { cont in
+            try await withCheckedThrowingContinuation(isolation: nil) { (cont: CheckedContinuation<Void, Error>) in
                 export.exportAsynchronously {
-                    cont.resume()
+                    cont.resume(returning: ())
                 }
             }
 
