@@ -1,0 +1,62 @@
+package com.steipete.clawdis.node
+
+import android.Manifest
+import android.os.Bundle
+import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.viewModels
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
+import androidx.core.content.ContextCompat
+import com.steipete.clawdis.node.ui.RootScreen
+
+class MainActivity : ComponentActivity() {
+  private val viewModel: MainViewModel by viewModels()
+
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    requestDiscoveryPermissionsIfNeeded()
+    viewModel.camera.attachLifecycleOwner(this)
+    setContent {
+      MaterialTheme {
+        Surface(modifier = Modifier) {
+          RootScreen(viewModel = viewModel)
+        }
+      }
+    }
+  }
+
+  override fun onStart() {
+    super.onStart()
+    viewModel.setForeground(true)
+  }
+
+  override fun onStop() {
+    viewModel.setForeground(false)
+    super.onStop()
+  }
+
+  private fun requestDiscoveryPermissionsIfNeeded() {
+    if (Build.VERSION.SDK_INT >= 33) {
+      val ok =
+        ContextCompat.checkSelfPermission(
+          this,
+          Manifest.permission.NEARBY_WIFI_DEVICES,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+      if (!ok) {
+        requestPermissions(arrayOf(Manifest.permission.NEARBY_WIFI_DEVICES), 100)
+      }
+    } else {
+      val ok =
+        ContextCompat.checkSelfPermission(
+          this,
+          Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+      if (!ok) {
+        requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 101)
+      }
+    }
+  }
+}
