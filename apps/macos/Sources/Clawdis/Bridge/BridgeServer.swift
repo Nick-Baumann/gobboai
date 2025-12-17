@@ -328,39 +328,35 @@ actor BridgeServer {
     }
 
     private func beaconPresence(nodeId: String, reason: String) async {
-        do {
-            let paired = await self.store?.find(nodeId: nodeId)
-            let host = paired?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
-                ?? nodeId
-            let version = paired?.version?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
-            let platform = paired?.platform?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
-            let ip = await self.connections[nodeId]?.remoteAddress()
+        let paired = await self.store?.find(nodeId: nodeId)
+        let host = paired?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+            ?? nodeId
+        let version = paired?.version?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        let platform = paired?.platform?.trimmingCharacters(in: .whitespacesAndNewlines).nonEmpty
+        let ip = await self.connections[nodeId]?.remoteAddress()
 
-            var tags: [String] = ["node", "ios"]
-            if let platform { tags.append(platform) }
+        var tags: [String] = ["node", "ios"]
+        if let platform { tags.append(platform) }
 
-            let summary = [
-                "Node: \(host)\(ip.map { " (\($0))" } ?? "")",
-                platform.map { "platform \($0)" },
-                version.map { "app \($0)" },
-                "mode node",
-                "reason \(reason)",
-            ].compactMap(\.self).joined(separator: " · ")
+        let summary = [
+            "Node: \(host)\(ip.map { " (\($0))" } ?? "")",
+            platform.map { "platform \($0)" },
+            version.map { "app \($0)" },
+            "mode node",
+            "reason \(reason)",
+        ].compactMap(\.self).joined(separator: " · ")
 
-            var params: [String: AnyCodable] = [
-                "text": AnyCodable(summary),
-                "instanceId": AnyCodable(nodeId),
-                "host": AnyCodable(host),
-                "mode": AnyCodable("node"),
-                "reason": AnyCodable(reason),
-                "tags": AnyCodable(tags),
-            ]
-            if let ip { params["ip"] = AnyCodable(ip) }
-            if let version { params["version"] = AnyCodable(version) }
-            await GatewayConnection.shared.sendSystemEvent(params)
-        } catch {
-            // Best-effort only.
-        }
+        var params: [String: AnyCodable] = [
+            "text": AnyCodable(summary),
+            "instanceId": AnyCodable(nodeId),
+            "host": AnyCodable(host),
+            "mode": AnyCodable("node"),
+            "reason": AnyCodable(reason),
+            "tags": AnyCodable(tags),
+        ]
+        if let ip { params["ip"] = AnyCodable(ip) }
+        if let version { params["version"] = AnyCodable(version) }
+        await GatewayConnection.shared.sendSystemEvent(params)
     }
 
     private func startPresenceTask(nodeId: String) {
@@ -467,12 +463,5 @@ enum BridgePairingApprover {
             let resp = alert.runModal()
             cont.resume(returning: resp == .alertFirstButtonReturn)
         }
-    }
-}
-
-extension String {
-    fileprivate var nonEmpty: String? {
-        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }

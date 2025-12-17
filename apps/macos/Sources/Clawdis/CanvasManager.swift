@@ -215,9 +215,3 @@ final class CanvasManager {
         return FileManager.default.fileExists(atPath: index.path)
     }
 }
-
-private extension String {
-    var nonEmpty: String? {
-        isEmpty ? nil : self
-    }
-}

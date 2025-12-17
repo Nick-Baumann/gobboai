@@ -118,7 +118,9 @@ final class CronJobsStore {
 
     func setJobEnabled(id: String, enabled: Bool) async {
         do {
-            try await GatewayConnection.shared.cronUpdate(jobId: id, patch: ["enabled": enabled])
+            try await GatewayConnection.shared.cronUpdate(
+                jobId: id,
+                patch: ["enabled": AnyCodable(enabled)])
             await self.refreshJobs()
         } catch {
             self.lastError = error.localizedDescription
@@ -127,7 +129,7 @@ final class CronJobsStore {
 
     func upsertJob(
         id: String?,
-        payload: [String: Any]) async throws
+        payload: [String: AnyCodable]) async throws
     {
         if let id {
             try await GatewayConnection.shared.cronUpdate(jobId: id, patch: payload)

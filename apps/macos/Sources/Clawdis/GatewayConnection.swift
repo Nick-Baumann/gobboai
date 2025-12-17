@@ -418,13 +418,13 @@ extension GatewayConnection {
         try await self.requestVoid(method: .cronRemove, params: ["id": AnyCodable(jobId)])
     }
 
-    func cronUpdate(jobId: String, patch: [String: Any]) async throws {
+    func cronUpdate(jobId: String, patch: [String: AnyCodable]) async throws {
         try await self.requestVoid(
             method: .cronUpdate,
             params: ["id": AnyCodable(jobId), "patch": AnyCodable(patch)])
     }
 
-    func cronAdd(payload: [String: Any]) async throws {
-        try await self.requestVoid(method: .cronAdd, params: payload.mapValues { AnyCodable($0) })
+    func cronAdd(payload: [String: AnyCodable]) async throws {
+        try await self.requestVoid(method: .cronAdd, params: payload)
     }
 }
