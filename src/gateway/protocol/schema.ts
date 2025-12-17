@@ -69,8 +69,6 @@ export const ConnectParamsSchema = Type.Object(
         modelIdentifier: Type.Optional(NonEmptyString),
         mode: NonEmptyString,
         instanceId: Type.Optional(NonEmptyString),
-        deviceFamily: Type.Optional(NonEmptyString),
-        modelIdentifier: Type.Optional(NonEmptyString),
       },
       { additionalProperties: false },
     ),

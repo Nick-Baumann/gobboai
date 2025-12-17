@@ -2024,7 +2024,8 @@ export async function startGatewayServer(
           });
         };
 
-        switch (req.method) {
+        void (async () => {
+          switch (req.method) {
           case "connect": {
             respond(
               false,
@@ -3372,6 +3373,14 @@ export async function startGatewayServer(
             break;
           }
         }
+        })().catch((err) => {
+          logError(`gateway: request handler failed: ${formatForLog(err)}`);
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)),
+          );
+        });
       } catch (err) {
         logError(`gateway: parse/handle error: ${String(err)}`);
         logWs("out", "parse-error", { connId, error: formatForLog(err) });
