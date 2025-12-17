@@ -66,4 +66,3 @@ public struct ClawdisChatSessionsListResponse: Codable, Sendable {
     public let defaults: ClawdisChatSessionsDefaults?
     public let sessions: [ClawdisChatSessionEntry]
 }
-
