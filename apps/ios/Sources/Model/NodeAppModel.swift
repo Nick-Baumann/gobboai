@@ -9,7 +9,7 @@ final class NodeAppModel {
     var isBackgrounded: Bool = false
     let screen = ScreenController()
     let camera = CameraController()
-    var bridgeStatusText: String = "Not connected"
+    var bridgeStatusText: String = "Offline"
     var bridgeServerName: String?
     var bridgeRemoteAddress: String?
     var connectedBridgeID: String?
@@ -129,7 +129,7 @@ final class NodeAppModel {
             }
 
             await MainActor.run {
-                self.bridgeStatusText = "Disconnected"
+                self.bridgeStatusText = "Offline"
                 self.bridgeServerName = nil
                 self.bridgeRemoteAddress = nil
                 self.connectedBridgeID = nil
@@ -143,7 +143,7 @@ final class NodeAppModel {
         self.voiceWakeSyncTask?.cancel()
         self.voiceWakeSyncTask = nil
         Task { await self.bridge.disconnect() }
-        self.bridgeStatusText = "Disconnected"
+        self.bridgeStatusText = "Offline"
         self.bridgeServerName = nil
         self.bridgeRemoteAddress = nil
         self.connectedBridgeID = nil
