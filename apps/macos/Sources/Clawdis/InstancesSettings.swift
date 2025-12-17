@@ -70,20 +70,26 @@ struct InstancesSettings: View {
                 if let version = inst.version {
                     self.label(icon: "shippingbox", text: version)
                 }
-                if let platform = inst.platform, let prettyPlatform = self.prettyPlatform(platform) {
-                    self.label(icon: self.platformIcon(platform), text: prettyPlatform)
-                }
-                if let device = DeviceModelCatalog.presentation(
+                let prettyPlatform = inst.platform.flatMap { self.prettyPlatform($0) }
+                let device = DeviceModelCatalog.presentation(
                     deviceFamily: inst.deviceFamily,
                     modelIdentifier: inst.modelIdentifier)
-                {
-                    // Avoid showing generic "Mac"/"iPhone"/etc when we already show the OS + role.
+
+                if let device {
+                    // Avoid showing generic "Mac"/"iPhone"/etc; prefer the concrete model name.
                     let family = (inst.deviceFamily ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !family.isEmpty, device.title != family {
-                        self.label(icon: device.symbol, text: device.title)
-                    } else if family.isEmpty {
-                        self.label(icon: device.symbol, text: device.title)
+                    let isGeneric = !family.isEmpty && device.title == family
+                    if !isGeneric {
+                        if let prettyPlatform {
+                            self.label(icon: device.symbol, text: "\(device.title) · \(prettyPlatform)")
+                        } else {
+                            self.label(icon: device.symbol, text: device.title)
+                        }
+                    } else if let prettyPlatform, let platform = inst.platform {
+                        self.label(icon: self.platformIcon(platform), text: prettyPlatform)
                     }
+                } else if let prettyPlatform, let platform = inst.platform {
+                    self.label(icon: self.platformIcon(platform), text: prettyPlatform)
                 }
 
                 // Last local input is helpful for interactive nodes, but noisy/meaningless for the gateway.
