@@ -18,7 +18,9 @@ struct ChatSessionsSheet: View {
                             .font(.system(.body, design: .monospaced))
                             .lineLimit(1)
                         if let updatedAt = session.updatedAt, updatedAt > 0 {
-                            Text(Date(timeIntervalSince1970: updatedAt / 1000).formatted(date: .abbreviated, time: .shortened))
+                            Text(Date(timeIntervalSince1970: updatedAt / 1000).formatted(
+                                date: .abbreviated,
+                                time: .shortened))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

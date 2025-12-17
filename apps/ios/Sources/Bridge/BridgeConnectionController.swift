@@ -140,7 +140,7 @@ final class BridgeConnectionController {
     }
 
     private func currentCaps() -> [String] {
-        var caps: [String] = ["canvas"]
+        var caps = ["canvas"]
 
         // Default-on: if the key doesn't exist yet, treat it as enabled.
         let cameraEnabled =
@@ -154,14 +154,13 @@ final class BridgeConnectionController {
 
     private func platformString() -> String {
         let v = ProcessInfo.processInfo.operatingSystemVersion
-        let name: String
-        switch UIDevice.current.userInterfaceIdiom {
+        let name = switch UIDevice.current.userInterfaceIdiom {
         case .pad:
-            name = "iPadOS"
+            "iPadOS"
         case .phone:
-            name = "iOS"
+            "iOS"
         default:
-            name = "iOS"
+            "iOS"
         }
         return "\(name) \(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
     }
@@ -169,11 +168,11 @@ final class BridgeConnectionController {
     private func deviceFamily() -> String {
         switch UIDevice.current.userInterfaceIdiom {
         case .pad:
-            return "iPad"
+            "iPad"
         case .phone:
-            return "iPhone"
+            "iPhone"
         default:
-            return "iOS"
+            "iOS"
         }
     }
 

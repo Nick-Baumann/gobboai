@@ -45,7 +45,8 @@ public final class ClawdisChatViewModel {
 
     private var pendingToolCallsById: [String: ClawdisChatPendingToolCall] = [:] {
         didSet {
-            self.pendingToolCalls = self.pendingToolCallsById.values.sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }
+            self.pendingToolCalls = self.pendingToolCallsById.values
+                .sorted { ($0.startedAt ?? 0) < ($1.startedAt ?? 0) }
         }
     }
 

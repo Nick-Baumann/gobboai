@@ -648,7 +648,16 @@ private final class CanvasA2UIActionMessageHandler: NSObject, WKScriptMessageHan
 
         // Token-efficient and unambiguous. The agent should treat this as a UI event and (by default) update Canvas.
         let text =
-            "CANVAS_A2UI action=\(Self.sanitizeTagValue(name)) session=\(Self.sanitizeTagValue(self.sessionKey)) surface=\(Self.sanitizeTagValue(surfaceId)) component=\(Self.sanitizeTagValue(sourceComponentId)) host=\(host) instance=\(instanceId)\(contextSuffix) default=update_canvas"
+            [
+                "CANVAS_A2UI",
+                "action=\(Self.sanitizeTagValue(name))",
+                "session=\(Self.sanitizeTagValue(self.sessionKey))",
+                "surface=\(Self.sanitizeTagValue(surfaceId))",
+                "component=\(Self.sanitizeTagValue(sourceComponentId))",
+                "host=\(host)",
+                "instance=\(instanceId)\(contextSuffix)",
+                "default=update_canvas",
+            ].joined(separator: " ")
 
         Task { [weak webView] in
             if AppStateStore.shared.connectionMode == .local {
