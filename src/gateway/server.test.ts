@@ -2078,7 +2078,11 @@ describe("gateway server", () => {
   test("chat.abort returns aborted=false for unknown runId", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "clawdis-gw-"));
     testSessionStorePath = path.join(dir, "sessions.json");
-    await fs.writeFile(testSessionStorePath, JSON.stringify({}, null, 2), "utf-8");
+    await fs.writeFile(
+      testSessionStorePath,
+      JSON.stringify({}, null, 2),
+      "utf-8",
+    );
 
     const { server, ws } = await startServerWithClient();
     await connectOk(ws);

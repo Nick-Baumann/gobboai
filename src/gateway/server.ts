@@ -540,9 +540,7 @@ async function refreshHealthSnapshot(_opts?: { probe?: boolean }) {
   return healthRefresh;
 }
 
-export async function startGatewayServer(
-  port = 18789,
-): Promise<GatewayServer> {
+export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
   const host = "127.0.0.1";
   const httpServer: HttpServer = createHttpServer();
   let bonjourStop: (() => Promise<void>) | null = null;
