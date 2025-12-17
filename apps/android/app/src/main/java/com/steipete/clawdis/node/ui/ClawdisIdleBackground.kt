@@ -5,10 +5,13 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -49,64 +52,75 @@ fun ClawdisIdleBackground(modifier: Modifier = Modifier) {
       label = "glowY",
     ).value
 
-  Canvas(modifier = modifier.fillMaxSize()) {
-    drawRect(Color.Black)
+  Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
+      val w = size.width
+      val h = size.height
 
-    val w = size.width
-    val h = size.height
+      fun radial(cx: Float, cy: Float, r: Float, color: Color): Brush =
+        Brush.radialGradient(
+          colors = listOf(color, Color.Transparent),
+          center = Offset(cx, cy),
+          radius = r,
+        )
 
-    fun radial(cx: Float, cy: Float, r: Float, color: Color): Brush =
-      Brush.radialGradient(
-        colors = listOf(color, Color.Transparent),
-        center = Offset(cx, cy),
-        radius = r,
+      drawRect(
+        brush = radial(w * 0.15f, h * 0.20f, r = maxOf(w, h) * 0.85f, color = Color(0xFF2A71FF).copy(alpha = 0.18f)),
+      )
+      drawRect(
+        brush = radial(w * 0.85f, h * 0.30f, r = maxOf(w, h) * 0.75f, color = Color(0xFFFF008A).copy(alpha = 0.14f)),
+      )
+      drawRect(
+        brush = radial(w * 0.60f, h * 0.90f, r = maxOf(w, h) * 0.85f, color = Color(0xFF00D1FF).copy(alpha = 0.10f)),
       )
 
-    drawRect(
-      brush = radial(w * 0.15f, h * 0.20f, r = maxOf(w, h) * 0.85f, color = Color(0xFF2A71FF).copy(alpha = 0.18f)),
-    )
-    drawRect(
-      brush = radial(w * 0.85f, h * 0.30f, r = maxOf(w, h) * 0.75f, color = Color(0xFFFF008A).copy(alpha = 0.14f)),
-    )
-    drawRect(
-      brush = radial(w * 0.60f, h * 0.90f, r = maxOf(w, h) * 0.85f, color = Color(0xFF00D1FF).copy(alpha = 0.10f)),
-    )
+      rotate(degrees = -7f) {
+        val spacing = 48.dp.toPx()
+        val line = Color.White.copy(alpha = 0.02f)
+        val offset = Offset(gridX.dp.toPx(), gridY.dp.toPx())
 
-    rotate(degrees = -7f) {
-      val spacing = 48.dp.toPx()
-      val line = Color.White.copy(alpha = 0.02f)
-      val offset = Offset(gridX.dp.toPx(), gridY.dp.toPx())
+        var x = (-w * 0.6f) + (offset.x % spacing)
+        while (x < w * 1.6f) {
+          drawLine(color = line, start = Offset(x, -h * 0.6f), end = Offset(x, h * 1.6f))
+          x += spacing
+        }
 
-      var x = (-w * 0.6f) + (offset.x % spacing)
-      while (x < w * 1.6f) {
-        drawLine(color = line, start = Offset(x, -h * 0.6f), end = Offset(x, h * 1.6f))
-        x += spacing
-      }
-
-      var y = (-h * 0.6f) + (offset.y % spacing)
-      while (y < h * 1.6f) {
-        drawLine(color = line, start = Offset(-w * 0.6f, y), end = Offset(w * 1.6f, y))
-        y += spacing
+        var y = (-h * 0.6f) + (offset.y % spacing)
+        while (y < h * 1.6f) {
+          drawLine(color = line, start = Offset(-w * 0.6f, y), end = Offset(w * 1.6f, y))
+          y += spacing
+        }
       }
     }
 
-    // Glow drift layer (approximation of iOS WebView scaffold).
-    val glowOffset = Offset(glowX.dp.toPx(), glowY.dp.toPx())
-    drawRect(
-      brush = radial(w * 0.30f + glowOffset.x, h * 0.30f + glowOffset.y, r = maxOf(w, h) * 0.75f, color = Color(0xFF2A71FF).copy(alpha = 0.16f)),
-      blendMode = BlendMode.Screen,
-      alpha = 0.55f,
-    )
-    drawRect(
-      brush = radial(w * 0.70f + glowOffset.x, h * 0.35f + glowOffset.y, r = maxOf(w, h) * 0.70f, color = Color(0xFFFF008A).copy(alpha = 0.12f)),
-      blendMode = BlendMode.Screen,
-      alpha = 0.55f,
-    )
-    drawRect(
-      brush = radial(w * 0.55f + glowOffset.x, h * 0.75f + glowOffset.y, r = maxOf(w, h) * 0.85f, color = Color(0xFF00D1FF).copy(alpha = 0.10f)),
-      blendMode = BlendMode.Screen,
-      alpha = 0.55f,
-    )
+    // Glow drift layer (closer to iOS WebView scaffold: blur + screen blend).
+    Canvas(modifier = Modifier.fillMaxSize().blur(28.dp)) {
+      val w = size.width
+      val h = size.height
+      val glowOffset = Offset(glowX.dp.toPx(), glowY.dp.toPx())
+
+      fun radial(cx: Float, cy: Float, r: Float, color: Color): Brush =
+        Brush.radialGradient(
+          colors = listOf(color, Color.Transparent),
+          center = Offset(cx, cy),
+          radius = r,
+        )
+
+      drawRect(
+        brush = radial(w * 0.30f + glowOffset.x, h * 0.30f + glowOffset.y, r = maxOf(w, h) * 0.75f, color = Color(0xFF2A71FF).copy(alpha = 0.16f)),
+        blendMode = BlendMode.Screen,
+        alpha = 0.55f,
+      )
+      drawRect(
+        brush = radial(w * 0.70f + glowOffset.x, h * 0.35f + glowOffset.y, r = maxOf(w, h) * 0.70f, color = Color(0xFFFF008A).copy(alpha = 0.12f)),
+        blendMode = BlendMode.Screen,
+        alpha = 0.55f,
+      )
+      drawRect(
+        brush = radial(w * 0.55f + glowOffset.x, h * 0.75f + glowOffset.y, r = maxOf(w, h) * 0.85f, color = Color(0xFF00D1FF).copy(alpha = 0.10f)),
+        blendMode = BlendMode.Screen,
+        alpha = 0.55f,
+      )
+    }
   }
 }
-
