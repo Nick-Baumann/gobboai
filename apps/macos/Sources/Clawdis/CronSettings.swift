@@ -454,7 +454,7 @@ struct CronSettings: View {
         return "in \(days)d"
     }
 
-    private func save(payload: [String: Any]) async {
+    private func save(payload: [String: AnyCodable]) async {
         guard !self.isSaving else { return }
         self.isSaving = true
         self.editorError = nil
@@ -494,7 +494,7 @@ struct CronJobEditor: View {
     @Binding var isSaving: Bool
     @Binding var error: String?
     let onCancel: () -> Void
-    let onSave: ([String: Any]) -> Void
+    let onSave: ([String: AnyCodable]) -> Void
 
     private let labelColumnWidth: CGFloat = 160
     private static let introText =
@@ -879,7 +879,7 @@ struct CronJobEditor: View {
         }
     }
 
-    private func buildPayload() throws -> [String: Any] {
+    private func buildPayload() throws -> [String: AnyCodable] {
         let name = self.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let schedule: [String: Any]
         switch self.scheduleKind {
@@ -969,7 +969,7 @@ struct CronJobEditor: View {
             ]
         }
 
-        return root
+        return root.mapValues { AnyCodable($0) }
     }
 
     private func buildAgentTurnPayload() -> [String: Any] {
