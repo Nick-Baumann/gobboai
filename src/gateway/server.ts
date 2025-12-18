@@ -18,6 +18,10 @@ import {
   startBrowserControlServerFromConfig,
   stopBrowserControlServer,
 } from "../browser/server.js";
+import {
+  type CanvasHostServer,
+  startCanvasHost,
+} from "../canvas-host/server.js";
 import { createDefaultDeps } from "../cli/deps.js";
 import { agentCommand } from "../commands/agent.js";
 import { getHealthSnapshot, type HealthSummary } from "../commands/health.js";
@@ -533,6 +537,7 @@ export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
   const httpServer: HttpServer = createHttpServer();
   let bonjourStop: (() => Promise<void>) | null = null;
   let bridge: Awaited<ReturnType<typeof startNodeBridgeServer>> | null = null;
+  let canvasHost: CanvasHostServer | null = null;
   const bridgeNodeSubscriptions = new Map<string, Set<string>>();
   const bridgeSessionSubscribers = new Map<string, Set<string>>();
   try {
@@ -586,6 +591,19 @@ export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
   >();
   const cfgAtStart = loadConfig();
   setCommandLaneConcurrency("cron", cfgAtStart.cron?.maxConcurrentRuns ?? 1);
+
+  if (cfgAtStart.canvasHost?.enabled === true) {
+    try {
+      canvasHost = await startCanvasHost({
+        runtime: defaultRuntime,
+        rootDir: cfgAtStart.canvasHost.root,
+        port: cfgAtStart.canvasHost.port ?? 18793,
+        bind: cfgAtStart.canvasHost.bind ?? "lan",
+      });
+    } catch (err) {
+      logWarn(`gateway: canvas host failed to start: ${String(err)}`);
+    }
+  }
 
   const cronStorePath = resolveCronStorePath(cfgAtStart.cron?.store);
   const cronLogger = getChildLogger({
@@ -1602,6 +1620,7 @@ export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
       instanceName: formatBonjourInstanceName(machineDisplayName),
       gatewayPort: port,
       bridgePort: bridge?.port,
+      canvasPort: canvasHost?.port,
       sshPort,
       tailnetDns,
     });
@@ -3571,6 +3590,13 @@ export async function startGatewayServer(port = 18789): Promise<GatewayServer> {
       if (bonjourStop) {
         try {
           await bonjourStop();
+        } catch {
+          /* ignore */
+        }
+      }
+      if (canvasHost) {
+        try {
+          await canvasHost.close();
         } catch {
           /* ignore */
         }
