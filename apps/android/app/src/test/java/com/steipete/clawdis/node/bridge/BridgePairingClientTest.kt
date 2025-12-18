@@ -48,6 +48,7 @@ class BridgePairingClientTest {
             version = "test",
             deviceFamily = "Android",
             modelIdentifier = "SM-X000",
+            caps = null,
           ),
       )
     assertTrue(res.ok)
@@ -95,6 +96,7 @@ class BridgePairingClientTest {
             version = "test",
             deviceFamily = "Android",
             modelIdentifier = "SM-X000",
+            caps = null,
           ),
       )
     assertTrue(res.ok)

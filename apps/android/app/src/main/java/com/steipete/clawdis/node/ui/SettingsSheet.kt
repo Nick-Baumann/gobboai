@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.steipete.clawdis.node.MainViewModel
 import com.steipete.clawdis.node.NodeForegroundService
+import com.steipete.clawdis.node.VoiceWakeMode
 
 @Composable
 fun SettingsSheet(viewModel: MainViewModel) {
@@ -56,6 +58,8 @@ fun SettingsSheet(viewModel: MainViewModel) {
   val cameraEnabled by viewModel.cameraEnabled.collectAsState()
   val preventSleep by viewModel.preventSleep.collectAsState()
   val wakeWords by viewModel.wakeWords.collectAsState()
+  val voiceWakeMode by viewModel.voiceWakeMode.collectAsState()
+  val voiceWakeStatusText by viewModel.voiceWakeStatusText.collectAsState()
   val isConnected by viewModel.isConnected.collectAsState()
   val manualEnabled by viewModel.manualEnabled.collectAsState()
   val manualHost by viewModel.manualHost.collectAsState()
@@ -76,6 +80,11 @@ fun SettingsSheet(viewModel: MainViewModel) {
     rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { perms ->
       val cameraOk = perms[Manifest.permission.CAMERA] == true
       viewModel.setCameraEnabled(cameraOk)
+    }
+
+  val audioPermissionLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+      // Status text is handled by NodeRuntime.
     }
 
   fun setCameraEnabledChecked(checked: Boolean) {
@@ -242,6 +251,67 @@ fun SettingsSheet(viewModel: MainViewModel) {
 
     // Voice
     item { Text("Voice", style = MaterialTheme.typography.titleSmall) }
+    item {
+      val enabled = voiceWakeMode != VoiceWakeMode.Off
+      ListItem(
+        headlineContent = { Text("Voice Wake") },
+        supportingContent = { Text(voiceWakeStatusText) },
+        trailingContent = {
+          Switch(
+            checked = enabled,
+            onCheckedChange = { on ->
+              if (on) {
+                val micOk =
+                  ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+                if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                viewModel.setVoiceWakeMode(VoiceWakeMode.Foreground)
+              } else {
+                viewModel.setVoiceWakeMode(VoiceWakeMode.Off)
+              }
+            },
+          )
+        },
+      )
+    }
+    item {
+      AnimatedVisibility(visible = voiceWakeMode != VoiceWakeMode.Off) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+          ListItem(
+            headlineContent = { Text("Foreground Only") },
+            supportingContent = { Text("Listens only while Clawdis is open.") },
+            trailingContent = {
+              RadioButton(
+                selected = voiceWakeMode == VoiceWakeMode.Foreground,
+                onClick = {
+                  val micOk =
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                      PackageManager.PERMISSION_GRANTED
+                  if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                  viewModel.setVoiceWakeMode(VoiceWakeMode.Foreground)
+                },
+              )
+            },
+          )
+          ListItem(
+            headlineContent = { Text("Always") },
+            supportingContent = { Text("Keeps listening in the background (shows a persistent notification).") },
+            trailingContent = {
+              RadioButton(
+                selected = voiceWakeMode == VoiceWakeMode.Always,
+                onClick = {
+                  val micOk =
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                      PackageManager.PERMISSION_GRANTED
+                  if (!micOk) audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                  viewModel.setVoiceWakeMode(VoiceWakeMode.Always)
+                },
+              )
+            },
+          )
+        }
+      }
+    }
     item {
       OutlinedTextField(
         value = wakeWordsText,

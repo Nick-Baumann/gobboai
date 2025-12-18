@@ -1,7 +1,10 @@
 package com.steipete.clawdis.node
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import androidx.core.content.ContextCompat
 import com.steipete.clawdis.node.chat.ChatController
 import com.steipete.clawdis.node.chat.ChatMessage
 import com.steipete.clawdis.node.chat.ChatPendingToolCall
@@ -13,6 +16,7 @@ import com.steipete.clawdis.node.bridge.BridgePairingClient
 import com.steipete.clawdis.node.bridge.BridgeSession
 import com.steipete.clawdis.node.node.CameraCaptureManager
 import com.steipete.clawdis.node.node.CanvasController
+import com.steipete.clawdis.node.voice.VoiceWakeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +25,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -29,6 +35,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 
 class NodeRuntime(context: Context) {
   private val appContext = context.applicationContext
@@ -38,6 +45,33 @@ class NodeRuntime(context: Context) {
   val canvas = CanvasController()
   val camera = CameraCaptureManager(appContext)
   private val json = Json { ignoreUnknownKeys = true }
+
+  private val externalAudioCaptureActive = MutableStateFlow(false)
+
+  private val voiceWake: VoiceWakeManager by lazy {
+    VoiceWakeManager(
+      context = appContext,
+      scope = scope,
+      onCommand = { command ->
+        session.sendEvent(
+          event = "agent.request",
+          payloadJson =
+            buildJsonObject {
+              put("message", JsonPrimitive(command))
+              put("sessionKey", JsonPrimitive("main"))
+              put("thinking", JsonPrimitive(chatThinkingLevel.value))
+              put("deliver", JsonPrimitive(false))
+            }.toString(),
+        )
+      },
+    )
+  }
+
+  val voiceWakeIsListening: StateFlow<Boolean>
+    get() = voiceWake.isListening
+
+  val voiceWakeStatusText: StateFlow<String>
+    get() = voiceWake.statusText
 
   private val discovery = BridgeDiscovery(appContext, scope = scope)
   val bridges: StateFlow<List<BridgeEndpoint>> = discovery.bridges
@@ -92,6 +126,7 @@ class NodeRuntime(context: Context) {
   val cameraEnabled: StateFlow<Boolean> = prefs.cameraEnabled
   val preventSleep: StateFlow<Boolean> = prefs.preventSleep
   val wakeWords: StateFlow<List<String>> = prefs.wakeWords
+  val voiceWakeMode: StateFlow<VoiceWakeMode> = prefs.voiceWakeMode
   val manualEnabled: StateFlow<Boolean> = prefs.manualEnabled
   val manualHost: StateFlow<String> = prefs.manualHost
   val manualPort: StateFlow<Int> = prefs.manualPort
@@ -113,6 +148,39 @@ class NodeRuntime(context: Context) {
   val pendingRunCount: StateFlow<Int> = chat.pendingRunCount
 
   init {
+    scope.launch {
+      combine(
+        voiceWakeMode,
+        isForeground,
+        externalAudioCaptureActive,
+        wakeWords,
+      ) { mode, foreground, externalAudio, words ->
+        Quad(mode, foreground, externalAudio, words)
+      }.distinctUntilChanged()
+        .collect { (mode, foreground, externalAudio, words) ->
+          voiceWake.setTriggerWords(words)
+
+          val shouldListen =
+            when (mode) {
+              VoiceWakeMode.Off -> false
+              VoiceWakeMode.Foreground -> foreground
+              VoiceWakeMode.Always -> true
+            } && !externalAudio
+
+          if (!shouldListen) {
+            voiceWake.stop(statusText = if (mode == VoiceWakeMode.Off) "Off" else "Paused")
+            return@collect
+          }
+
+          if (!hasRecordAudioPermission()) {
+            voiceWake.stop(statusText = "Microphone permission required")
+            return@collect
+          }
+
+          voiceWake.start()
+        }
+    }
+
     scope.launch(Dispatchers.Default) {
       bridges.collect { list ->
         if (list.isNotEmpty()) {
@@ -182,6 +250,10 @@ class NodeRuntime(context: Context) {
     setWakeWords(SecurePrefs.defaultWakeWords)
   }
 
+  fun setVoiceWakeMode(mode: VoiceWakeMode) {
+    prefs.setVoiceWakeMode(mode)
+  }
+
   fun connect(endpoint: BridgeEndpoint) {
     scope.launch {
       _statusText.value = "Connecting…"
@@ -196,6 +268,7 @@ class NodeRuntime(context: Context) {
           val caps = buildList {
             add("canvas")
             if (cameraEnabled.value) add("camera")
+            if (voiceWakeMode.value != VoiceWakeMode.Off && hasRecordAudioPermission()) add("voiceWake")
           }
           BridgePairingClient().pairAndHello(
             endpoint = endpoint,
@@ -237,10 +310,18 @@ class NodeRuntime(context: Context) {
               buildList {
                 add("canvas")
                 if (cameraEnabled.value) add("camera")
+                if (voiceWakeMode.value != VoiceWakeMode.Off && hasRecordAudioPermission()) add("voiceWake")
               },
           ),
       )
     }
+  }
+
+  private fun hasRecordAudioPermission(): Boolean {
+    return (
+      ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) ==
+        PackageManager.PERMISSION_GRANTED
+      )
   }
 
   fun connectManual() {
@@ -405,8 +486,14 @@ class NodeRuntime(context: Context) {
         BridgeSession.InvokeResult.ok(res.payloadJson)
       }
       "camera.clip" -> {
-        val res = camera.clip(paramsJson)
-        BridgeSession.InvokeResult.ok(res.payloadJson)
+        val includeAudio = paramsJson?.contains("\"includeAudio\":true") != false
+        if (includeAudio) externalAudioCaptureActive.value = true
+        try {
+          val res = camera.clip(paramsJson)
+          BridgeSession.InvokeResult.ok(res.payloadJson)
+        } finally {
+          if (includeAudio) externalAudioCaptureActive.value = false
+        }
       }
       else ->
         BridgeSession.InvokeResult.error(
@@ -416,6 +503,8 @@ class NodeRuntime(context: Context) {
     }
   }
 }
+
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 private fun String.toJsonString(): String {
   val escaped =
