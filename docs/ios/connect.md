@@ -141,7 +141,7 @@ The response includes `base64` PNG data (for debugging/verification).
 
 ## Common gotchas
 
-- **iOS in background:** all `screen.*` commands fail fast with `NODE_BACKGROUND_UNAVAILABLE` (bring Iris to foreground).
+- **iOS in background:** all `canvas.*` commands fail fast with `NODE_BACKGROUND_UNAVAILABLE` (bring Iris to foreground).
 - **mDNS blocked:** some networks block multicast; use a different LAN or plan a tailnet-capable bridge (see `docs/discovery.md`).
 - **Wrong node selector:** `--node` can be the node id (UUID), display name (e.g. `iOS Node`), IP, or an unambiguous prefix. If it’s ambiguous, the CLI will tell you.
 - **Stale pairing / Keychain cleared:** if the pairing token is missing (or iOS Keychain was wiped), Iris must pair again; approve a new pending request.

@@ -50,7 +50,7 @@ All camera access is gated behind **user-controlled settings**.
 
 ### Foreground requirement
 
-Like `screen.*`, the iOS node only allows `camera.*` commands in the **foreground**. Background invocations return `NODE_BACKGROUND_UNAVAILABLE`.
+Like `canvas.*`, the iOS node only allows `camera.*` commands in the **foreground**. Background invocations return `NODE_BACKGROUND_UNAVAILABLE`.
 
 ### CLI helper (temp files + MEDIA)
 
@@ -87,7 +87,7 @@ If permissions are denied, `camera.*` requests fail with a `*_PERMISSION_REQUIRE
 
 ### Foreground requirement
 
-Like `screen.*`, the Android node only allows `camera.*` commands in the **foreground**. Background invocations return `NODE_BACKGROUND_UNAVAILABLE`.
+Like `canvas.*`, the Android node only allows `camera.*` commands in the **foreground**. Background invocations return `NODE_BACKGROUND_UNAVAILABLE`.
 
 ## macOS app
 
