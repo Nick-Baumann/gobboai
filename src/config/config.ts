@@ -93,6 +93,24 @@ export type DiscoveryConfig = {
   wideArea?: WideAreaDiscoveryConfig;
 };
 
+export type CanvasHostConfig = {
+  enabled?: boolean;
+  /** Directory to serve (default: ~/clawd/canvas). */
+  root?: string;
+  /** HTTP port to listen on (default: 18793). */
+  port?: number;
+  /**
+   * Bind address policy for the canvas host HTTP server.
+   * - auto: listen on all interfaces (LAN + tailnet)
+   * - lan:  0.0.0.0 (reachable on local network + any forwarded interfaces)
+   * - tailnet: bind only to the Tailscale interface IP (100.64.0.0/10)
+   * - loopback: 127.0.0.1
+   *
+   * Recommended: lan (works on LAN + tailnet when present).
+   */
+  bind?: BridgeBindMode;
+};
+
 export type ClawdisConfig = {
   identity?: {
     name?: string;
@@ -139,6 +157,7 @@ export type ClawdisConfig = {
   cron?: CronConfig;
   bridge?: BridgeConfig;
   discovery?: DiscoveryConfig;
+  canvasHost?: CanvasHostConfig;
 };
 
 // New branding path (preferred)
@@ -292,6 +311,21 @@ const ClawdisSchema = z.object({
         .object({
           enabled: z.boolean().optional(),
         })
+        .optional(),
+    })
+    .optional(),
+  canvasHost: z
+    .object({
+      enabled: z.boolean().optional(),
+      root: z.string().optional(),
+      port: z.number().int().positive().optional(),
+      bind: z
+        .union([
+          z.literal("auto"),
+          z.literal("lan"),
+          z.literal("tailnet"),
+          z.literal("loopback"),
+        ])
         .optional(),
     })
     .optional(),

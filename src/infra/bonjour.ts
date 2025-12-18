@@ -12,6 +12,7 @@ export type GatewayBonjourAdvertiseOpts = {
   gatewayPort: number;
   sshPort?: number;
   bridgePort?: number;
+  canvasPort?: number;
   tailnetDns?: string;
 };
 
@@ -107,6 +108,9 @@ export async function startGatewayBonjourAdvertiser(
   };
   if (typeof opts.bridgePort === "number" && opts.bridgePort > 0) {
     txtBase.bridgePort = String(opts.bridgePort);
+  }
+  if (typeof opts.canvasPort === "number" && opts.canvasPort > 0) {
+    txtBase.canvasPort = String(opts.canvasPort);
   }
   if (typeof opts.tailnetDns === "string" && opts.tailnetDns.trim()) {
     txtBase.tailnetDns = opts.tailnetDns.trim();
