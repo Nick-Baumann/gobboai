@@ -97,6 +97,38 @@ describe("cli program", () => {
     expect(output).toContain("caps: [camera,canvas]");
   });
 
+  it("runs nodes status and shows unpaired nodes", async () => {
+    callGateway.mockResolvedValue({
+      ts: Date.now(),
+      nodes: [
+        {
+          nodeId: "android-node",
+          displayName: "Peter's Tab S10 Ultra",
+          remoteIp: "192.168.0.99",
+          deviceFamily: "Android",
+          modelIdentifier: "samsung SM-X926B",
+          caps: ["canvas", "camera"],
+          paired: false,
+          connected: true,
+        },
+      ],
+    });
+    const program = buildProgram();
+    runtime.log.mockClear();
+    await program.parseAsync(["nodes", "status"], { from: "user" });
+
+    const output = runtime.log.mock.calls
+      .map((c) => String(c[0] ?? ""))
+      .join("\n");
+    expect(output).toContain("Known: 1 · Paired: 0 · Connected: 1");
+    expect(output).toContain("Peter's Tab S10 Ultra");
+    expect(output).toContain("device: Android");
+    expect(output).toContain("hw: samsung SM-X926B");
+    expect(output).toContain("unpaired");
+    expect(output).toContain("connected");
+    expect(output).toContain("caps: [camera,canvas]");
+  });
+
   it("runs nodes describe and calls node.describe", async () => {
     callGateway
       .mockResolvedValueOnce({
