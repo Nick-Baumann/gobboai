@@ -52,7 +52,7 @@ export class GatewayClient {
     if (this.closed) return;
     const url = this.opts.url ?? "ws://127.0.0.1:18789";
     // Allow node screen snapshots and other large responses.
-    this.ws = new WebSocket(url, { maxPayload: 10 * 1024 * 1024 });
+    this.ws = new WebSocket(url, { maxPayload: 25 * 1024 * 1024 });
 
     this.ws.on("open", () => this.sendConnect());
     this.ws.on("message", (data) => this.handleMessage(data.toString()));
