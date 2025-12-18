@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package com.steipete.clawdis.node
 
 import android.content.Context
@@ -15,6 +17,7 @@ class SecurePrefs(context: Context) {
   companion object {
     val defaultWakeWords: List<String> = listOf("clawd", "claude")
     private const val displayNameKey = "node.displayName"
+    private const val voiceWakeModeKey = "voiceWake.mode"
   }
 
   private val json = Json { ignoreUnknownKeys = true }
@@ -61,6 +64,9 @@ class SecurePrefs(context: Context) {
 
   private val _wakeWords = MutableStateFlow(loadWakeWords())
   val wakeWords: StateFlow<List<String>> = _wakeWords
+
+  private val _voiceWakeMode = MutableStateFlow(loadVoiceWakeMode())
+  val voiceWakeMode: StateFlow<VoiceWakeMode> = _voiceWakeMode
 
   fun setLastDiscoveredStableId(value: String) {
     val trimmed = value.trim()
@@ -135,6 +141,23 @@ class SecurePrefs(context: Context) {
       JsonArray(sanitized.map { JsonPrimitive(it) }).toString()
     prefs.edit().putString("voiceWake.triggerWords", encoded).apply()
     _wakeWords.value = sanitized
+  }
+
+  fun setVoiceWakeMode(mode: VoiceWakeMode) {
+    prefs.edit().putString(voiceWakeModeKey, mode.rawValue).apply()
+    _voiceWakeMode.value = mode
+  }
+
+  private fun loadVoiceWakeMode(): VoiceWakeMode {
+    val raw = prefs.getString(voiceWakeModeKey, null)
+    val resolved = VoiceWakeMode.fromRawValue(raw)
+
+    // Default ON (foreground) when unset.
+    if (raw.isNullOrBlank()) {
+      prefs.edit().putString(voiceWakeModeKey, resolved.rawValue).apply()
+    }
+
+    return resolved
   }
 
   private fun loadWakeWords(): List<String> {

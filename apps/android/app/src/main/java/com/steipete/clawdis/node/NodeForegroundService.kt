@@ -5,11 +5,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.app.PendingIntent
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,26 +24,42 @@ import kotlinx.coroutines.launch
 class NodeForegroundService : Service() {
   private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
   private var notificationJob: Job? = null
+  private var lastRequiresMic = false
+  private var didStartForeground = false
 
   override fun onCreate() {
     super.onCreate()
     ensureChannel()
     val initial = buildNotification(title = "Clawdis Node", text = "Starting…")
-    if (Build.VERSION.SDK_INT >= 29) {
-      startForeground(NOTIFICATION_ID, initial, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-    } else {
-      startForeground(NOTIFICATION_ID, initial)
-    }
+    startForegroundWithTypes(notification = initial, requiresMic = false)
 
     val runtime = (application as NodeApp).runtime
     notificationJob =
       scope.launch {
-        combine(runtime.statusText, runtime.serverName, runtime.isConnected) { status, server, connected ->
-          Triple(status, server, connected)
-        }.collect { (status, server, connected) ->
+        combine(
+          runtime.statusText,
+          runtime.serverName,
+          runtime.isConnected,
+          runtime.voiceWakeMode,
+          runtime.voiceWakeIsListening,
+        ) { status, server, connected, voiceMode, voiceListening ->
+          Quint(status, server, connected, voiceMode, voiceListening)
+        }.collect { (status, server, connected, voiceMode, voiceListening) ->
           val title = if (connected) "Clawdis Node · Connected" else "Clawdis Node"
-          val text = server?.let { "$status · $it" } ?: status
-          updateNotification(buildNotification(title = title, text = text))
+          val voiceSuffix =
+            if (voiceMode == VoiceWakeMode.Always) {
+              if (voiceListening) " · Voice Wake: Listening" else " · Voice Wake: Paused"
+            } else {
+              ""
+            }
+          val text = (server?.let { "$status · $it" } ?: status) + voiceSuffix
+
+          val requiresMic =
+            voiceMode == VoiceWakeMode.Always && hasRecordAudioPermission()
+          startForegroundWithTypes(
+            notification = buildNotification(title = title, text = text),
+            requiresMic = requiresMic,
+          )
         }
       }
   }
@@ -106,6 +125,35 @@ class NodeForegroundService : Service() {
     mgr.notify(NOTIFICATION_ID, notification)
   }
 
+  private fun startForegroundWithTypes(notification: Notification, requiresMic: Boolean) {
+    if (Build.VERSION.SDK_INT < 29) {
+      startForeground(NOTIFICATION_ID, notification)
+      return
+    }
+
+    if (didStartForeground && requiresMic == lastRequiresMic) {
+      updateNotification(notification)
+      return
+    }
+
+    lastRequiresMic = requiresMic
+    val types =
+      if (requiresMic) {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+      } else {
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+      }
+    startForeground(NOTIFICATION_ID, notification, types)
+    didStartForeground = true
+  }
+
+  private fun hasRecordAudioPermission(): Boolean {
+    return (
+      ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+        PackageManager.PERMISSION_GRANTED
+      )
+  }
+
   companion object {
     private const val CHANNEL_ID = "connection"
     private const val NOTIFICATION_ID = 1
@@ -127,3 +175,5 @@ class NodeForegroundService : Service() {
     }
   }
 }
+
+private data class Quint<A, B, C, D, E>(val first: A, val second: B, val third: C, val fourth: D, val fifth: E)

@@ -67,6 +67,9 @@ class BridgeSessionTest {
           token = null,
           platform = "Android",
           version = "test",
+          deviceFamily = null,
+          modelIdentifier = null,
+          caps = null,
         ),
     )
 
@@ -129,6 +132,9 @@ class BridgeSessionTest {
           token = null,
           platform = "Android",
           version = "test",
+          deviceFamily = null,
+          modelIdentifier = null,
+          caps = null,
         ),
     )
     connected.await()
@@ -196,6 +202,9 @@ class BridgeSessionTest {
           token = null,
           platform = "Android",
           version = "test",
+          deviceFamily = null,
+          modelIdentifier = null,
+          caps = null,
         ),
     )
     connected.await()
