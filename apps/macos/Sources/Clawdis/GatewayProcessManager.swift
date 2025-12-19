@@ -53,6 +53,8 @@ final class GatewayProcessManager {
     private var desiredActive = false
     private var stopping = false
     private var recentCrashes: [Date] = []
+    private var environmentRefreshTask: Task<Void, Never>?
+    private var lastEnvironmentRefresh: Date?
 
     private final class GatewayLockHandle {
         private let fd: FileDescriptor
@@ -73,6 +75,7 @@ final class GatewayProcessManager {
     private let logLimit = 20000 // characters to keep in-memory
     private let maxCrashes = 3
     private let crashWindow: TimeInterval = 120 // seconds
+    private let environmentRefreshMinInterval: TimeInterval = 30
 
     func setActive(_ active: Bool) {
         // Remote mode should never spawn a local gateway; treat as stopped.
@@ -141,12 +144,26 @@ final class GatewayProcessManager {
         self.execution = nil
     }
 
-    func refreshEnvironmentStatus() {
-        Task {
+    func refreshEnvironmentStatus(force: Bool = false) {
+        let now = Date()
+        if !force {
+            if self.environmentRefreshTask != nil { return }
+            if let last = self.lastEnvironmentRefresh,
+               now.timeIntervalSince(last) < self.environmentRefreshMinInterval
+            {
+                return
+            }
+        }
+        self.lastEnvironmentRefresh = now
+        self.environmentRefreshTask = Task { [weak self] in
             let status = await Task.detached(priority: .utility) {
                 GatewayEnvironment.check()
             }.value
-            self.environmentStatus = status
+            await MainActor.run {
+                guard let self else { return }
+                self.environmentStatus = status
+                self.environmentRefreshTask = nil
+            }
         }
     }
 
