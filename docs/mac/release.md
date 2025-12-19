@@ -28,6 +28,9 @@ scripts/package-mac-app.sh
 # Zip for distribution (includes resource forks for Sparkle delta support)
 ditto -c -k --sequesterRsrc --keepParent dist/Clawdis.app dist/Clawdis-0.1.0.zip
 
+# Optional: also build a styled DMG for humans (drag to /Applications)
+scripts/create-dmg.sh dist/Clawdis.app dist/Clawdis-0.1.0.dmg
+
 # Optional: ship dSYM alongside the release
 ditto -c -k --keepParent apps/macos/.build/release/Clawdis.app.dSYM dist/Clawdis-0.1.0.dSYM.zip
 ```
