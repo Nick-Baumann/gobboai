@@ -5,7 +5,7 @@ import { defineConfig } from "vite";
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
-  base: "/ui/",
+  base: "/",
   build: {
     outDir: path.resolve(here, "../dist/control-ui"),
     emptyOutDir: true,
