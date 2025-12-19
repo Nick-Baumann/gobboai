@@ -248,7 +248,7 @@ struct MenuContent: View {
             default:
                 components.scheme = "http"
             }
-            components.path = "/ui/"
+            components.path = "/"
             components.query = nil
             guard let url = components.url else {
                 throw NSError(domain: "Dashboard", code: 2, userInfo: [

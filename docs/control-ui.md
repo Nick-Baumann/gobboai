@@ -8,7 +8,8 @@ read_when:
 
 The Control UI is a small **Vite + Lit** single-page app served by the Gateway under:
 
-- `http://<host>:18789/ui/`
+- `http://<host>:18789/` (preferred)
+- `http://<host>:18789/ui/` (legacy alias)
 
 It speaks **directly to the Gateway WebSocket** on the same port.
 
@@ -48,4 +49,3 @@ pnpm ui:dev
 ```
 
 Then point the UI at your Gateway WS URL (e.g. `ws://127.0.0.1:18789`).
-

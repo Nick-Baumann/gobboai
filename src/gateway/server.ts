@@ -848,12 +848,6 @@ export async function startGatewayServer(
     if (String(req.headers.upgrade ?? "").toLowerCase() === "websocket") return;
 
     if (controlUiEnabled) {
-      if (req.url === "/") {
-        res.statusCode = 302;
-        res.setHeader("Location", "/ui/");
-        res.end();
-        return;
-      }
       if (handleControlUiHttpRequest(req, res)) return;
     }
 
