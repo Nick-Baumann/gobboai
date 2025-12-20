@@ -18,6 +18,7 @@ How to see whether the WhatsApp Web/Baileys bridge is healthy from the menu bar 
 ## Settings
 - General tab gains a Health card showing: linked auth age, session-store path/count, last check time, last error/status code, and buttons for Run Health Check / Reveal Logs.
 - Uses a cached snapshot so the UI loads instantly and falls back gracefully when offline.
+- **Connections tab** surfaces provider status + controls for WhatsApp/Telegram (login QR, logout, probe, last disconnect/error).
 
 ## How the probe works
 - App runs `clawdis health --json` via `ShellExecutor` every ~60s and on demand. The probe loads creds, attempts a short Baileys connect, and reports status without sending messages.
