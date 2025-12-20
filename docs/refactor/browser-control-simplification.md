@@ -27,7 +27,7 @@ Goal: make the browser-control surface **small, stable, and agent-oriented**, an
 - `POST /navigate` `{ url, targetId? }`
 - `POST /act` `{ kind, targetId?, ... }` where `kind` is one of:
   - `click`, `type`, `press`, `hover`, `drag`, `select`, `fill`, `wait`, `resize`, `close`, `evaluate`
-- `POST /screenshot` `{ targetId?, fullPage?, ref?, element?, type?, filename? }`
+- `POST /screenshot` `{ targetId?, fullPage?, ref?, element?, type? }`
 - `GET /snapshot` `?format=ai|aria&targetId?&limit?`
 - `GET /console` `?level?&targetId?`
 - `POST /pdf` `{ targetId? }`
@@ -37,7 +37,7 @@ Goal: make the browser-control surface **small, stable, and agent-oriented**, an
 - `POST /hooks/dialog` `{ targetId?, accept, promptText?, timeoutMs? }`
 
 Semantics:
-- Hook endpoints **arm** the next matching event within `timeoutMs` (default 10s).
+- Hook endpoints **arm** the next matching event within `timeoutMs` (default 2 minutes, clamped to max 2 minutes).
 - Last arm wins per page (new arm replaces previous).
 
 ## Work checklist

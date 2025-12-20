@@ -189,7 +189,7 @@ Actions:
 
 Notes:
 - `upload` and `dialog` are **arming** calls; run them before the click/press that triggers the chooser/dialog.
-- The arm default timeout is **2 minutes**; pass `timeoutMs` if you need longer.
+- The arm default timeout is **2 minutes** (clamped to max 2 minutes); pass `timeoutMs` if you need shorter.
 - `snapshot --format ai` returns AI snapshot markup used for ref-based actions.
 
 ## Security & privacy notes
