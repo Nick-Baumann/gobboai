@@ -120,15 +120,20 @@ private struct AttachmentRow: View {
 
 @MainActor
 struct ChatTypingIndicatorBubble: View {
+    let style: ClawdisChatView.Style
+
     var body: some View {
         HStack(spacing: 10) {
             TypingDots()
-            Text("Clawd is thinking…")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
+            if self.style == .standard {
+                Text("Clawd is thinking…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
         }
-        .padding(12)
+        .padding(.vertical, self.style == .standard ? 12 : 10)
+        .padding(.horizontal, self.style == .standard ? 12 : 14)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(ClawdisChatTheme.assistantBubble))

@@ -69,7 +69,7 @@ public struct ClawdisChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: Layout.messageSpacing) {
-                    ForEach(self.viewModel.messages) { msg in
+                    ForEach(self.visibleMessages) { msg in
                         ChatMessageBubble(message: msg)
                             .frame(
                                 maxWidth: .infinity,
@@ -77,7 +77,7 @@ public struct ClawdisChatView: View {
                     }
 
                     if self.viewModel.pendingRunCount > 0 {
-                        ChatTypingIndicatorBubble()
+                        ChatTypingIndicatorBubble(style: self.style)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
@@ -110,5 +110,12 @@ public struct ClawdisChatView: View {
                 }
             }
         }
+    }
+
+    private var visibleMessages: [ClawdisChatMessage] {
+        guard self.style == .onboarding else { return self.viewModel.messages }
+        guard let first = self.viewModel.messages.first else { return [] }
+        guard first.role.lowercased() == "user" else { return self.viewModel.messages }
+        return Array(self.viewModel.messages.dropFirst())
     }
 }
