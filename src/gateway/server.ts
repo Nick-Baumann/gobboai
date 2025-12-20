@@ -418,6 +418,73 @@ function formatForLog(value: unknown): string {
   }
 }
 
+function compactPreview(input: string, maxLen = 160): string {
+  const oneLine = input.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= maxLen) return oneLine;
+  return `${oneLine.slice(0, Math.max(0, maxLen - 1))}…`;
+}
+
+function summarizeAgentEventForWsLog(
+  payload: unknown,
+): Record<string, unknown> {
+  if (!payload || typeof payload !== "object") return {};
+  const rec = payload as Record<string, unknown>;
+  const runId = typeof rec.runId === "string" ? rec.runId : undefined;
+  const stream = typeof rec.stream === "string" ? rec.stream : undefined;
+  const seq = typeof rec.seq === "number" ? rec.seq : undefined;
+  const data =
+    rec.data && typeof rec.data === "object"
+      ? (rec.data as Record<string, unknown>)
+      : undefined;
+
+  const extra: Record<string, unknown> = {};
+  if (runId) extra.run = shortId(runId);
+  if (stream) extra.stream = stream;
+  if (seq !== undefined) extra.aseq = seq;
+
+  if (!data) return extra;
+
+  if (stream === "assistant") {
+    const text = typeof data.text === "string" ? data.text : undefined;
+    if (text?.trim()) extra.text = compactPreview(text);
+    const mediaUrls = Array.isArray(data.mediaUrls)
+      ? data.mediaUrls
+      : undefined;
+    if (mediaUrls && mediaUrls.length > 0) extra.media = mediaUrls.length;
+    return extra;
+  }
+
+  if (stream === "tool") {
+    const phase = typeof data.phase === "string" ? data.phase : undefined;
+    const name = typeof data.name === "string" ? data.name : undefined;
+    if (phase || name) extra.tool = `${phase ?? "?"}:${name ?? "?"}`;
+    const toolCallId =
+      typeof data.toolCallId === "string" ? data.toolCallId : undefined;
+    if (toolCallId) extra.call = shortId(toolCallId);
+    const meta = typeof data.meta === "string" ? data.meta : undefined;
+    if (meta?.trim()) extra.meta = meta;
+    if (typeof data.isError === "boolean") extra.err = data.isError;
+    return extra;
+  }
+
+  if (stream === "job") {
+    const state = typeof data.state === "string" ? data.state : undefined;
+    if (state) extra.state = state;
+    if (data.to === null) extra.to = null;
+    else if (typeof data.to === "string") extra.to = data.to;
+    if (typeof data.durationMs === "number")
+      extra.ms = Math.round(data.durationMs);
+    if (typeof data.aborted === "boolean") extra.aborted = data.aborted;
+    const error = typeof data.error === "string" ? data.error : undefined;
+    if (error?.trim()) extra.error = compactPreview(error, 120);
+    return extra;
+  }
+
+  const reason = typeof data.reason === "string" ? data.reason : undefined;
+  if (reason?.trim()) extra.reason = reason;
+  return extra;
+}
+
 function normalizeVoiceWakeTriggers(input: unknown): string[] {
   const raw = Array.isArray(input) ? input : [];
   const cleaned = raw
@@ -1117,14 +1184,18 @@ export async function startGatewayServer(
       seq: eventSeq,
       stateVersion: opts?.stateVersion,
     });
-    logWs("out", "event", {
+    const logMeta: Record<string, unknown> = {
       event,
       seq: eventSeq,
       clients: clients.size,
       dropIfSlow: opts?.dropIfSlow,
       presenceVersion: opts?.stateVersion?.presence,
       healthVersion: opts?.stateVersion?.health,
-    });
+    };
+    if (event === "agent") {
+      Object.assign(logMeta, summarizeAgentEventForWsLog(payload));
+    }
+    logWs("out", "event", logMeta);
     for (const c of clients) {
       const slow = c.socket.bufferedAmount > MAX_BUFFERED_BYTES;
       if (slow && opts?.dropIfSlow) continue;
@@ -1802,8 +1873,7 @@ export async function startGatewayServer(
           typeof obj.sessionKey === "string" ? obj.sessionKey.trim() : "";
         const mainKey =
           (loadConfig().inbound?.session?.mainKey ?? "main").trim() || "main";
-        const sessionKey =
-          sessionKeyRaw.length > 0 ? sessionKeyRaw : mainKey;
+        const sessionKey = sessionKeyRaw.length > 0 ? sessionKeyRaw : mainKey;
         const { storePath, store, entry } = loadSessionEntry(sessionKey);
         const now = Date.now();
         const sessionId = entry?.sessionId ?? randomUUID();
@@ -2061,6 +2131,8 @@ export async function startGatewayServer(
     );
   }
 
+  const tailnetDns = await resolveTailnetDnsHint();
+
   try {
     const sshPortEnv = process.env.CLAWDIS_SSH_PORT?.trim();
     const sshPortParsed = sshPortEnv ? Number.parseInt(sshPortEnv, 10) : NaN;
@@ -2068,8 +2140,6 @@ export async function startGatewayServer(
       Number.isFinite(sshPortParsed) && sshPortParsed > 0
         ? sshPortParsed
         : undefined;
-
-    const tailnetDns = await resolveTailnetDnsHint();
 
     const bonjour = await startGatewayBonjourAdvertiser({
       instanceName: formatBonjourInstanceName(machineDisplayName),

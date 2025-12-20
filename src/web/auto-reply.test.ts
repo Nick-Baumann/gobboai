@@ -1738,11 +1738,16 @@ describe("web auto-reply", () => {
 
     const resolver = vi
       .fn()
-      .mockImplementation(async (_ctx, opts?: { onToolResult?: Function }) => {
-        await opts?.onToolResult?.({ text: "[🛠️ tool1]" });
-        await opts?.onToolResult?.({ text: "[🛠️ tool2]" });
-        return { text: "final" };
-      });
+      .mockImplementation(
+        async (
+          _ctx,
+          opts?: { onToolResult?: (r: { text: string }) => Promise<void> },
+        ) => {
+          await opts?.onToolResult?.({ text: "[🛠️ tool1]" });
+          await opts?.onToolResult?.({ text: "[🛠️ tool2]" });
+          return { text: "final" };
+        },
+      );
 
     await monitorWebProvider(false, listenerFactory, false, resolver);
     expect(capturedOnMessage).toBeDefined();
