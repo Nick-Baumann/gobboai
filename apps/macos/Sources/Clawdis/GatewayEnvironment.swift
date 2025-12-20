@@ -63,6 +63,7 @@ struct GatewayCommandResolution {
 
 enum GatewayEnvironment {
     private static let logger = Logger(subsystem: "com.steipete.clawdis", category: "gateway.env")
+    private static let supportedBindModes: Set<String> = ["loopback", "tailnet", "lan", "auto"]
 
     static func bundledGatewayExecutable() -> String? {
         guard let res = Bundle.main.resourceURL else { return nil }
@@ -198,7 +199,8 @@ enum GatewayEnvironment {
 
         let port = self.gatewayPort()
         if let bundled {
-            let cmd = [bundled, "gateway-daemon", "--port", "\(port)", "--bind", "loopback"]
+            let bind = self.preferredGatewayBind() ?? "loopback"
+            let cmd = [bundled, "gateway-daemon", "--port", "\(port)", "--bind", bind]
             return GatewayCommandResolution(status: status, command: cmd)
         }
         if let gatewayBin {
@@ -214,6 +216,27 @@ enum GatewayEnvironment {
         }
 
         return GatewayCommandResolution(status: status, command: nil)
+    }
+
+    private static func preferredGatewayBind() -> String? {
+        if let env = ProcessInfo.processInfo.environment["CLAWDIS_GATEWAY_BIND"] {
+            let trimmed = env.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if self.supportedBindModes.contains(trimmed) {
+                return trimmed
+            }
+        }
+
+        let root = ClawdisConfigFile.loadDict()
+        if let gateway = root["gateway"] as? [String: Any],
+           let bind = gateway["bind"] as? String
+        {
+            let trimmed = bind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if self.supportedBindModes.contains(trimmed) {
+                return trimmed
+            }
+        }
+
+        return nil
     }
 
     static func installGlobal(version: Semver?, statusHandler: @escaping @Sendable (String) -> Void) async {

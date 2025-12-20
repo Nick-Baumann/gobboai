@@ -1,6 +1,8 @@
 import Foundation
 
 enum GatewayLaunchAgentManager {
+    private static let supportedBindModes: Set<String> = ["loopback", "tailnet", "lan", "auto"]
+
     private static var plistURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/LaunchAgents/\(gatewayLaunchdLabel).plist")
@@ -52,6 +54,20 @@ enum GatewayLaunchAgentManager {
         let relayDir = self.relayDir(bundlePath: bundlePath)
         let preferredPath = ([relayDir] + CommandResolver.preferredPaths())
             .joined(separator: ":")
+        let bind = self.preferredGatewayBind() ?? "loopback"
+        let token = self.preferredGatewayToken()
+        var envEntries = """
+            <key>PATH</key>
+            <string>\(preferredPath)</string>
+            <key>CLAWDIS_IMAGE_BACKEND</key>
+            <string>sips</string>
+        """
+        if let token {
+            envEntries += """
+                <key>CLAWDIS_GATEWAY_TOKEN</key>
+                <string>\(token)</string>
+            """
+        }
         let plist = """
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -66,7 +82,7 @@ enum GatewayLaunchAgentManager {
             <string>--port</string>
             <string>\(port)</string>
             <string>--bind</string>
-            <string>loopback</string>
+            <string>\(bind)</string>
           </array>
           <key>WorkingDirectory</key>
           <string>\(FileManager.default.homeDirectoryForCurrentUser.path)</string>
@@ -76,10 +92,7 @@ enum GatewayLaunchAgentManager {
           <true/>
           <key>EnvironmentVariables</key>
           <dict>
-            <key>PATH</key>
-            <string>\(preferredPath)</string>
-            <key>CLAWDIS_IMAGE_BACKEND</key>
-            <string>sips</string>
+        \(envEntries)
           </dict>
           <key>StandardOutPath</key>
           <string>\(LogLocator.launchdGatewayLogPath)</string>
@@ -89,6 +102,33 @@ enum GatewayLaunchAgentManager {
         </plist>
         """
         try? plist.write(to: self.plistURL, atomically: true, encoding: .utf8)
+    }
+
+    private static func preferredGatewayBind() -> String? {
+        if let env = ProcessInfo.processInfo.environment["CLAWDIS_GATEWAY_BIND"] {
+            let trimmed = env.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if self.supportedBindModes.contains(trimmed) {
+                return trimmed
+            }
+        }
+
+        let root = ClawdisConfigFile.loadDict()
+        if let gateway = root["gateway"] as? [String: Any],
+           let bind = gateway["bind"] as? String
+        {
+            let trimmed = bind.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if self.supportedBindModes.contains(trimmed) {
+                return trimmed
+            }
+        }
+
+        return nil
+    }
+
+    private static func preferredGatewayToken() -> String? {
+        let raw = ProcessInfo.processInfo.environment["CLAWDIS_GATEWAY_TOKEN"] ?? ""
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private struct LaunchctlResult {
