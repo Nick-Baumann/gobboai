@@ -136,6 +136,7 @@ clawdis nodes invoke --node "iOS Node" --command canvas.navigate --params '{"url
 
 Notes:
 - The server injects a live-reload client into HTML and reloads on file changes.
+- A2UI is hosted on the same canvas host at `http://<gateway-host>:18793/__clawdis__/a2ui/`.
 - Tailnet (optional): if both devices are on Tailscale, use a MagicDNS name or tailnet IP instead of `.local`, e.g. `http://<gateway-magicdns>:18793/`.
 - iOS may require App Transport Security allowances to load plain `http://` URLs; if it fails to load, prefer HTTPS or adjust the iOS app’s ATS config.
 
@@ -159,7 +160,7 @@ The response includes `{ format, base64 }` image data (default `format="jpeg"`; 
 ## Common gotchas
 
 - **iOS in background:** all `canvas.*` commands fail fast with `NODE_BACKGROUND_UNAVAILABLE` (bring the iOS node app to foreground).
-- **Return to default scaffold:** `canvas.navigate` with `{"url":""}` or `{"url":"/"}` returns to the built-in canvas/A2UI scaffold.
+- **Return to default scaffold:** `canvas.navigate` with `{"url":""}` or `{"url":"/"}` returns to the built-in scaffold page.
 - **mDNS blocked:** some networks block multicast; use a different LAN or plan a tailnet-capable bridge (see `docs/discovery.md`).
 - **Wrong node selector:** `--node` can be the node id (UUID), display name (e.g. `iOS Node`), IP, or an unambiguous prefix. If it’s ambiguous, the CLI will tell you.
 - **Stale pairing / Keychain cleared:** if the pairing token is missing (or iOS Keychain was wiped), the node must pair again; approve a new pending request.

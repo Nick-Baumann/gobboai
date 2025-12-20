@@ -10,7 +10,7 @@ read_when:
 
 Status: draft spec · Date: 2025-12-12
 
-Note: for iOS/Android nodes that should render agent-edited HTML/CSS/JS over the network, prefer the Gateway `canvasHost` (serves `~/clawd/canvas` over LAN/tailnet with live reload). This doc focuses on the macOS in-app canvas panel. See `docs/configuration.md`.
+Note: for iOS/Android nodes that should render agent-edited HTML/CSS/JS over the network, prefer the Gateway `canvasHost` (serves `~/clawd/canvas` over LAN/tailnet with live reload). A2UI is also **hosted by the Gateway** over HTTP. This doc focuses on the macOS in-app canvas panel. See `docs/configuration.md`.
 
 Clawdis can embed an agent-controlled “visual workspace” panel (“Canvas”) inside the macOS app using `WKWebView`, served via a **custom URL scheme** (no loopback HTTP port required).
 
@@ -41,17 +41,8 @@ Routing model:
 
 Directory listings are not served.
 
-When `/` has no `index.html` yet, the handler serves a **built-in A2UI shell** (bundled with the macOS app).
-This gives the agent a ready-to-render UI surface without requiring any on-disk HTML.
-
-If the A2UI shell resources are missing (dev misconfiguration), Canvas falls back to a simple built-in welcome page.
-
-### Reserved built-in paths
-
-The scheme handler serves bundled assets under:
-- `clawdis-canvas://<session>/__clawdis__/a2ui/...`
-
-This is reserved for app-owned assets (not session content) and is backed by `Bundle.module` resources.
+When `/` has no `index.html` yet, the handler serves a **built-in scaffold page** (bundled with the macOS app).
+This is a visual placeholder only (no A2UI renderer).
 
 ### Suggested on-disk location
 
@@ -98,14 +89,20 @@ Use the main `clawdis` CLI; it invokes canvas commands via `node.invoke`.
 
 - `clawdis canvas present [--node <id>] [--target <...>] [--x/--y/--width/--height]`
   - Local targets map into the session directory via the custom scheme (directory targets resolve `index.html|index.htm`).
-  - If `/` has no index file, Canvas shows the built-in A2UI shell and returns `status: "a2uiShell"`.
+  - If `/` has no index file, Canvas shows the built-in scaffold page and returns `status: "welcome"`.
 - `clawdis canvas hide [--node <id>]`
 - `clawdis canvas eval --js <code> [--node <id>]`
 - `clawdis canvas snapshot [--node <id>]`
 
 ### Canvas A2UI
 
-Canvas includes a built-in **A2UI v0.8** renderer (Lit-based). The agent can drive it with JSONL **server→client protocol messages** (one JSON object per line):
+Canvas A2UI is hosted by the **Gateway canvas host** at:
+
+```
+http(s)://<gateway-host>:<canvasPort>/__clawdis__/a2ui/
+```
+
+The macOS app simply renders that page in the Canvas panel. The agent can drive it with JSONL **server→client protocol messages** (one JSON object per line):
 
 - `clawdis canvas a2ui push --jsonl <path> [--node <id>]`
 - `clawdis canvas a2ui reset [--node <id>]`
@@ -125,6 +122,7 @@ clawdis canvas a2ui push --jsonl /tmp/a2ui-v0.8.jsonl --node <id>
 
 Notes:
 - This does **not** support the A2UI v0.9 examples using `createSurface`.
+- A2UI **fails** if the Gateway canvas host is unreachable (no local fallback).
 
 ## Triggering agent runs from Canvas (deep links)
 

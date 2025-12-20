@@ -1,48 +1,96 @@
-# Canvas / A2UI
+---
+summary: "Refactor: host A2UI from the Gateway (HTTP), remove app-bundled shells"
+read_when:
+  - Refactoring Canvas/A2UI ownership or assets
+  - Moving UI rendering from native bundles into the Gateway
+  - Updating node canvas navigation or A2UI command flows
+---
+
+# Canvas / A2UI — HTTP-hosted from Gateway
+
+Status: Implemented · Date: 2025-12-20
 
 ## Goal
-- A2UI rendering works out-of-the-box (no per-user toggles).
-- A2UI button clicks always reach the agent automatically.
-- Canvas chrome (close button) stays readable on any content.
+- Make the **Gateway (TypeScript)** the single owner of A2UI.
+- Remove **app-bundled A2UI shells** (macOS, iOS, Android).
+- A2UI renders only when the **Gateway is reachable** (acceptable failure mode).
 
-## Current behavior
-- Canvas can show a bundled A2UI shell at `/__clawdis__/a2ui/` when no session `index.html` exists.
-- The A2UI shell forwards `a2ui.action` button clicks to native via `WKScriptMessageHandler` (`clawdisCanvasA2UIAction`).
-- Native forwards the click to the gateway as an agent invocation.
+## Decision
+All A2UI HTML/JS assets are **served by the Gateway’s Canvas host** over HTTP.
+Nodes (mac/iOS/Android) **navigate to the Gateway URL** before applying A2UI
+messages. No local custom-scheme or bundled fallback remains.
 
-## Fixes (2025-12-17)
-- Close button: render a small vibrancy/material pill behind the “x” and reduce the button size for less visual weight.
-- Click reliability:
-  - Allow A2UI clicks from any local Canvas path (not just `/` or the built-in A2UI shell).
-  - Inject an A2UI → native bridge at document start that listens for `a2uiaction` and forwards it:
-    - Prefer `WKScriptMessageHandler` when available.
-    - Otherwise fall back to an unattended `clawdis://agent?...&key=...` deep link (no prompt).
-  - Avoid double-sending actions when the bundled A2UI shell is present (let the shell forward clicks so it can resolve richer context).
-  - Intercept `clawdis://…` navigations inside the Canvas WKWebView and route them through `DeepLinkHandler` (no NSWorkspace bounce).
-  - `GatewayConnection` auto-starts the local gateway (and retries briefly) when a request fails in `.local` mode, so Canvas actions don’t silently fail if the gateway isn’t running yet.
-  - Fix a crash that made `clawdis canvas present`/`eval` look “hung”:
-    - `VoicePushToTalkHotkey`’s NSEvent monitor could call `@MainActor` code off-main, triggering executor checks / EXC_BAD_ACCESS on macOS 26.2.
-    - Now it hops back to the main actor before mutating state.
-  - Preserve in-page state when closing Canvas (hide the window instead of closing the `WKWebView`).
-  - Fix another “Canvas looks hung” source: node pairing approval used `NSAlert.runModal()` on the main actor, which stalls Canvas/IPC while the alert is open.
-  - Add UX feedback + better agent prompting:
-    - Show a small “Sending/Working” spinner when a button is clicked.
-    - Show “Updated/Failed” toasts (failures include the gateway error string).
-    - Send a compact, unambiguous agent message that includes machine identity + Canvas context (instead of a big JSON markdown block).
-    - Native acks the click back into the page via `clawdis:a2ui-action-status` so the UI can switch from “Sending…” to “Working…” immediately.
+## Why
+- One source of truth (TS) for A2UI rendering.
+- Faster iteration (no app release required for A2UI updates).
+- iOS/Android/macOS all behave identically.
 
-## Suggested message format (token-efficient)
-We want the model to immediately understand:
-- This is a **Canvas UI event** (not user chat).
-- It happened on **this specific Mac**.
-- Default behavior is to **update the Canvas UI** (unless the button context says otherwise).
+## New behavior (summary)
+1) `canvas.a2ui.*` on any node:
+   - Ensure Canvas is visible.
+   - Navigate the node WebView to the Gateway A2UI URL.
+   - Apply/reset A2UI messages once the page is ready.
+2) If Gateway is unreachable:
+   - A2UI fails with an explicit error (no fallback).
 
-Proposed message line (single-line, parseable):
+## Gateway changes
+
+### Serve A2UI assets
+Add A2UI HTML/JS to the Gateway Canvas host, e.g.:
 
 ```
-CANVAS_A2UI action=<name> session=<sessionKey> surface=<surfaceId> component=<componentId> host=<machine> instance=<instanceId> ctx=<json?> default=update_canvas
+/__clawdis__/a2ui/           -> index.html
+/__clawdis__/a2ui/a2ui.bundle.js -> bundled A2UI runtime
 ```
 
-## Follow-ups
-- Add a small “action sent / failed” debug overlay in the A2UI shell (dev-only) to make failures obvious.
-- Decide whether non-local Canvas content should ever be allowed to emit A2UI actions (current stance: no, for safety).
+Use the existing Canvas host server (`src/canvas-host/server.ts`) to serve these
+assets and inject the action bridge + live reload if desired.
+
+### Derive HTTP host from WebSocket
+Nodes derive the Canvas host URL from the Gateway WS URL:
+
+```
+ws://host:port  -> http://host:port
+wss://host:port -> https://host:port
+```
+
+The Gateway exposes a **canonical** `canvasHostUrl` in hello/bridge payloads
+so nodes don’t need to guess.
+
+## Node changes (mac/iOS/Android)
+
+### Navigation path
+Before applying A2UI:
+- Navigate to `${canvasHostUrl}/__clawdis__/a2ui/`.
+
+### Remove bundled shells
+Remove all fallback logic that serves A2UI from local bundles:
+- macOS: remove custom-scheme fallback for `/__clawdis__/a2ui/`
+- iOS/Android: remove packaged A2UI assets and "default scaffold" assumptions
+
+### Error behavior
+If `canvasHostUrl` is missing or unreachable:
+- `canvas.a2ui.push/reset` returns a clear error:
+  - `A2UI_HOST_UNAVAILABLE` or `A2UI_HOST_NOT_CONFIGURED`
+
+## Security / transport
+- For non-TLS Gateway URLs (http), iOS/Android will need ATS exceptions.
+- For TLS (https), prefer WSS + HTTPS with a valid cert.
+
+## Implementation plan
+1) Gateway
+   - Add A2UI assets under `src/canvas-host/`.
+   - Serve them at `/__clawdis__/a2ui/` (align with existing naming).
+   - Expose `canvasHostUrl` in handshake + bridge hello payloads.
+2) Node runtimes
+   - Update `canvas.a2ui.*` to navigate to `canvasHostUrl`.
+   - Remove custom-scheme A2UI fallback and bundled assets.
+3) Tests
+   - TS: verify `/__clawdis__/a2ui/` responds with HTML + JS.
+   - Node: verify A2UI fails when host is unreachable and succeeds when reachable.
+4) Docs
+   - Update `docs/mac/canvas.md`, `docs/ios/spec.md`, `docs/android/connect.md`
+     to remove local fallback assumptions and point to gateway-hosted A2UI.
+
+## Notes
+- iOS/Android may still require ATS exceptions for `http://` canvas hosts.

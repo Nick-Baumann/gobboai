@@ -116,9 +116,10 @@ clawdis nodes invoke --node "<Android Node>" --command canvas.navigate --params 
 Tailnet (optional): if both devices are on Tailscale, use a MagicDNS name or tailnet IP instead of `.local`, e.g. `http://<gateway-magicdns>:18793/`.
 
 This server injects a live-reload client into HTML and reloads on file changes.
+The A2UI host lives at `http://<gateway-host>:18793/__clawdis__/a2ui/`.
 
 Canvas commands (foreground only):
-- `canvas.eval`, `canvas.snapshot`, `canvas.navigate` (use `{"url":""}` or `{"url":"/"}` to return to the default canvas/A2UI scaffold). `canvas.snapshot` returns `{ format, base64 }` (default `format="jpeg"`).
+- `canvas.eval`, `canvas.snapshot`, `canvas.navigate` (use `{"url":""}` or `{"url":"/"}` to return to the default scaffold). `canvas.snapshot` returns `{ format, base64 }` (default `format="jpeg"`).
 - A2UI: `canvas.a2ui.push`, `canvas.a2ui.reset` (`canvas.a2ui.pushJSONL` legacy alias)
 
 Camera commands (foreground only; permission-gated):
