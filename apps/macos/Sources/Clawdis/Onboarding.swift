@@ -1053,6 +1053,13 @@ struct OnboardingView: View {
                     title: "Open the menu bar panel",
                     subtitle: "Click the Clawdis menu bar icon for quick chat and status.",
                     systemImage: "bubble.left.and.bubble.right")
+                self.featureActionRow(
+                    title: "Connect WhatsApp or Telegram",
+                    subtitle: "Open Settings → Connections to link providers and monitor status.",
+                    systemImage: "link")
+                {
+                    self.openSettings(tab: .connections)
+                }
                 self.featureRow(
                     title: "Try Voice Wake",
                     subtitle: "Enable Voice Wake in Settings for hands-free commands with a live transcript overlay.",
