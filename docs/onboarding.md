@@ -13,6 +13,7 @@ This doc describes the intended **first-run onboarding** for Clawdis. The goal i
 
 1) **Local vs Remote**
 2) **(Local only)** Connect Claude (Anthropic OAuth) — optional, but recommended
+3) **Onboarding chat** — dedicated session where the agent introduces itself and guides setup
 
 ## 1) Local vs Remote
 
@@ -74,7 +75,21 @@ Until that is hard-coded, the equivalent configuration is:
 
 If the user skips auth, onboarding should be clear: the agent likely won’t respond until auth is configured.
 
-## 3) Agent bootstrap ritual (outside onboarding)
+## 3) Onboarding chat (dedicated session)
+
+The onboarding flow now embeds the SwiftUI chat view directly. It uses a **special session key**
+(`onboarding`) so the “newborn agent” ritual stays separate from the main chat.
+
+This onboarding chat is where the agent:
+- does the BOOTSTRAP.md identity ritual (one question at a time)
+- asks how the user wants to talk (web-only / WhatsApp / Telegram)
+- guides linking steps (including showing a QR inline for WhatsApp via the `whatsapp_login` tool)
+
+If the agent identity already exists in `~/.clawdis/clawdis.json`, the onboarding chat step is skipped.
+
+Once setup is complete, the user can switch to the normal chat (`main`) via the menu bar panel.
+
+## 4) Agent bootstrap ritual (outside onboarding)
 
 We no longer collect identity in the onboarding wizard. Instead, the **first agent run** performs a playful bootstrap ritual using files in the workspace:
 
@@ -98,7 +113,7 @@ Identity data still feeds the same defaults as before:
 - default session intro (“You are Samantha…”)
 - macOS UI labels
 
-## 4) Workspace notes (no explicit onboarding step)
+## 5) Workspace notes (no explicit onboarding step)
 
 The workspace is created automatically as part of agent bootstrap (no dedicated onboarding screen).
 
