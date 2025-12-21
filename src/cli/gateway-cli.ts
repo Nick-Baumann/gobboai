@@ -175,9 +175,7 @@ export function registerGatewayCli(program: Command) {
         process.removeListener("SIGINT", onSigint);
 
         if (shuttingDown) {
-          gatewayLog.info(
-            `received ${signal} during shutdown; exiting now`,
-          );
+          gatewayLog.info(`received ${signal} during shutdown; exiting now`);
           defaultRuntime.exit(0);
         }
         shuttingDown = true;
@@ -414,9 +412,7 @@ export function registerGatewayCli(program: Command) {
         process.removeListener("SIGINT", onSigint);
 
         if (shuttingDown) {
-          gatewayLog.info(
-            `received ${signal} during shutdown; exiting now`,
-          );
+          gatewayLog.info(`received ${signal} during shutdown; exiting now`);
           defaultRuntime.exit(0);
         }
         shuttingDown = true;
