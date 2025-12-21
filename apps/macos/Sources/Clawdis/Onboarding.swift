@@ -974,10 +974,6 @@ struct OnboardingView: View {
                     subtitle: "Open the menu bar panel for quick chat; the agent can show previews " +
                         "and richer visuals in Canvas.",
                     systemImage: "rectangle.inset.filled.and.person.filled")
-                self.featureRow(
-                    title: "Test a notification",
-                    subtitle: "Send a quick notify via the menu bar to confirm sounds and permissions.",
-                    systemImage: "bell.badge")
                 self.featureActionRow(
                     title: "Give your agent more powers",
                     subtitle: "Enable optional skills (Peekaboo, oracle, camsnap, …) from Settings → Skills.",
