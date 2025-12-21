@@ -17,8 +17,7 @@ let state: BrowserServerState | null = null;
 const log = createSubsystemLogger("browser");
 const logServer = log.child("server");
 
-export async function startBrowserControlServerFromConfig(
-): Promise<BrowserServerState | null> {
+export async function startBrowserControlServerFromConfig(): Promise<BrowserServerState | null> {
   if (state) return state;
 
   const cfg = loadConfig();
@@ -70,8 +69,7 @@ export async function startBrowserControlServerFromConfig(
   return state;
 }
 
-export async function stopBrowserControlServer(
-): Promise<void> {
+export async function stopBrowserControlServer(): Promise<void> {
   const current = state;
   if (!current) return;
 

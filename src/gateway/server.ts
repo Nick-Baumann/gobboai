@@ -569,7 +569,8 @@ function formatForLog(value: unknown): string {
       if (value.name) parts.push(value.name);
       if (value.message) parts.push(value.message);
       const code =
-        "code" in value && (typeof value.code === "string" || typeof value.code === "number")
+        "code" in value &&
+        (typeof value.code === "string" || typeof value.code === "number")
           ? String(value.code)
           : "";
       if (code) parts.push(`code=${code}`);
@@ -1480,7 +1481,9 @@ export async function startGatewayServer(
         running: false,
         lastError: "not configured",
       };
-      logTelegram.info("skipping provider start (no TELEGRAM_BOT_TOKEN/config)");
+      logTelegram.info(
+        "skipping provider start (no TELEGRAM_BOT_TOKEN/config)",
+      );
       return;
     }
     logTelegram.info("starting provider");
@@ -2589,9 +2592,7 @@ export async function startGatewayServer(
           `wide-area DNS-SD ${result.changed ? "updated" : "unchanged"} (${WIDE_AREA_DISCOVERY_DOMAIN} → ${result.zonePath})`,
         );
       } catch (err) {
-        logDiscovery.warn(
-          `wide-area discovery update failed: ${String(err)}`,
-        );
+        logDiscovery.warn(`wide-area discovery update failed: ${String(err)}`);
       }
     }
   }
