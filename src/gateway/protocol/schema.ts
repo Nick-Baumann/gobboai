@@ -291,6 +291,30 @@ export const SessionsPatchParamsSchema = Type.Object(
     key: NonEmptyString,
     thinkingLevel: Type.Optional(Type.Union([NonEmptyString, Type.Null()])),
     verboseLevel: Type.Optional(Type.Union([NonEmptyString, Type.Null()])),
+    syncing: Type.Optional(
+      Type.Union([Type.Boolean(), NonEmptyString, Type.Null()]),
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export const SessionsResetParamsSchema = Type.Object(
+  { key: NonEmptyString },
+  { additionalProperties: false },
+);
+
+export const SessionsDeleteParamsSchema = Type.Object(
+  {
+    key: NonEmptyString,
+    deleteTranscript: Type.Optional(Type.Boolean()),
+  },
+  { additionalProperties: false },
+);
+
+export const SessionsCompactParamsSchema = Type.Object(
+  {
+    key: NonEmptyString,
+    maxLines: Type.Optional(Type.Integer({ minimum: 1 })),
   },
   { additionalProperties: false },
 );
@@ -629,6 +653,9 @@ export const ProtocolSchemas: Record<string, TSchema> = {
   NodeInvokeParams: NodeInvokeParamsSchema,
   SessionsListParams: SessionsListParamsSchema,
   SessionsPatchParams: SessionsPatchParamsSchema,
+  SessionsResetParams: SessionsResetParamsSchema,
+  SessionsDeleteParams: SessionsDeleteParamsSchema,
+  SessionsCompactParams: SessionsCompactParamsSchema,
   ConfigGetParams: ConfigGetParamsSchema,
   ConfigSetParams: ConfigSetParamsSchema,
   ProvidersStatusParams: ProvidersStatusParamsSchema,
@@ -681,6 +708,9 @@ export type NodeDescribeParams = Static<typeof NodeDescribeParamsSchema>;
 export type NodeInvokeParams = Static<typeof NodeInvokeParamsSchema>;
 export type SessionsListParams = Static<typeof SessionsListParamsSchema>;
 export type SessionsPatchParams = Static<typeof SessionsPatchParamsSchema>;
+export type SessionsResetParams = Static<typeof SessionsResetParamsSchema>;
+export type SessionsDeleteParams = Static<typeof SessionsDeleteParamsSchema>;
+export type SessionsCompactParams = Static<typeof SessionsCompactParamsSchema>;
 export type ConfigGetParams = Static<typeof ConfigGetParamsSchema>;
 export type ConfigSetParams = Static<typeof ConfigSetParamsSchema>;
 export type ProvidersStatusParams = Static<typeof ProvidersStatusParamsSchema>;

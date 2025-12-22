@@ -271,7 +271,10 @@ import {
   PROTOCOL_VERSION,
   type RequestFrame,
   type SessionsListParams,
+  type SessionsCompactParams,
+  type SessionsDeleteParams,
   type SessionsPatchParams,
+  type SessionsResetParams,
   type Snapshot,
   validateAgentParams,
   validateChatAbortParams,
@@ -300,7 +303,10 @@ import {
   validateRequestFrame,
   validateSendParams,
   validateSessionsListParams,
+  validateSessionsCompactParams,
+  validateSessionsDeleteParams,
   validateSessionsPatchParams,
+  validateSessionsResetParams,
   validateSkillsInstallParams,
   validateSkillsStatusParams,
   validateSkillsUpdateParams,
@@ -389,6 +395,9 @@ const METHODS = [
   "voicewake.set",
   "sessions.list",
   "sessions.patch",
+  "sessions.reset",
+  "sessions.delete",
+  "sessions.compact",
   "last-heartbeat",
   "set-heartbeats",
   "wake",
@@ -697,27 +706,7 @@ function readSessionMessages(
   sessionId: string,
   storePath: string | undefined,
 ): unknown[] {
-  const candidates: string[] = [];
-  if (storePath) {
-    const dir = path.dirname(storePath);
-    candidates.push(path.join(dir, `${sessionId}.jsonl`));
-  }
-  candidates.push(
-    path.join(os.homedir(), ".clawdis", "sessions", `${sessionId}.jsonl`),
-  );
-  candidates.push(
-    path.join(os.homedir(), ".pi", "agent", "sessions", `${sessionId}.jsonl`),
-  );
-  candidates.push(
-    path.join(
-      os.homedir(),
-      ".tau",
-      "agent",
-      "sessions",
-      "clawdis",
-      `${sessionId}.jsonl`,
-    ),
-  );
+  const candidates = resolveSessionTranscriptCandidates(sessionId, storePath);
 
   const filePath = candidates.find((p) => fs.existsSync(p));
   if (!filePath) return [];
@@ -739,6 +728,41 @@ function readSessionMessages(
     }
   }
   return messages;
+}
+
+function resolveSessionTranscriptCandidates(
+  sessionId: string,
+  storePath: string | undefined,
+): string[] {
+  const candidates: string[] = [];
+  if (storePath) {
+    const dir = path.dirname(storePath);
+    candidates.push(path.join(dir, `${sessionId}.jsonl`));
+  }
+  candidates.push(
+    path.join(os.homedir(), ".clawdis", "sessions", `${sessionId}.jsonl`),
+  );
+  candidates.push(
+    path.join(os.homedir(), ".pi", "agent", "sessions", `${sessionId}.jsonl`),
+  );
+  candidates.push(
+    path.join(
+      os.homedir(),
+      ".tau",
+      "agent",
+      "sessions",
+      "clawdis",
+      `${sessionId}.jsonl`,
+    ),
+  );
+  return candidates;
+}
+
+function archiveFileOnDisk(filePath: string, reason: string): string {
+  const ts = new Date().toISOString().replaceAll(":", "-");
+  const archived = `${filePath}.${reason}.${ts}`;
+  fs.renameSync(filePath, archived);
+  return archived;
 }
 
 function jsonUtf8Bytes(value: unknown): number {
@@ -1990,6 +2014,206 @@ export async function startGatewayServer(
             entry: next,
           };
           return { ok: true, payloadJSON: JSON.stringify(payload) };
+        }
+        case "sessions.reset": {
+          const params = parseParams();
+          if (!validateSessionsResetParams(params)) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: `invalid sessions.reset params: ${formatValidationErrors(validateSessionsResetParams.errors)}`,
+              },
+            };
+          }
+
+          const p = params as SessionsResetParams;
+          const key = String(p.key ?? "").trim();
+          if (!key) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: "key required",
+              },
+            };
+          }
+
+          const { storePath, store, entry } = loadSessionEntry(key);
+          const now = Date.now();
+          const next: SessionEntry = {
+            sessionId: randomUUID(),
+            updatedAt: now,
+            systemSent: false,
+            abortedLastRun: false,
+            thinkingLevel: entry?.thinkingLevel,
+            verboseLevel: entry?.verboseLevel,
+            syncing: entry?.syncing,
+            model: entry?.model,
+            contextTokens: entry?.contextTokens,
+            lastChannel: entry?.lastChannel,
+            lastTo: entry?.lastTo,
+            skillsSnapshot: entry?.skillsSnapshot,
+          };
+          store[key] = next;
+          await saveSessionStore(storePath, store);
+          return {
+            ok: true,
+            payloadJSON: JSON.stringify({ ok: true, key, entry: next }),
+          };
+        }
+        case "sessions.delete": {
+          const params = parseParams();
+          if (!validateSessionsDeleteParams(params)) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: `invalid sessions.delete params: ${formatValidationErrors(validateSessionsDeleteParams.errors)}`,
+              },
+            };
+          }
+
+          const p = params as SessionsDeleteParams;
+          const key = String(p.key ?? "").trim();
+          if (!key) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: "key required",
+              },
+            };
+          }
+
+          const deleteTranscript =
+            typeof p.deleteTranscript === "boolean" ? p.deleteTranscript : true;
+
+          const { storePath, store, entry } = loadSessionEntry(key);
+          const sessionId = entry?.sessionId;
+          const existed = Boolean(store[key]);
+          if (existed) delete store[key];
+          await saveSessionStore(storePath, store);
+
+          const archived: string[] = [];
+          if (deleteTranscript && sessionId) {
+            for (const candidate of resolveSessionTranscriptCandidates(
+              sessionId,
+              storePath,
+            )) {
+              if (!fs.existsSync(candidate)) continue;
+              try {
+                archived.push(archiveFileOnDisk(candidate, "deleted"));
+              } catch {
+                // Best-effort; deleting the store entry is the main operation.
+              }
+            }
+          }
+
+          return {
+            ok: true,
+            payloadJSON: JSON.stringify({
+              ok: true,
+              key,
+              deleted: existed,
+              archived,
+            }),
+          };
+        }
+        case "sessions.compact": {
+          const params = parseParams();
+          if (!validateSessionsCompactParams(params)) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: `invalid sessions.compact params: ${formatValidationErrors(validateSessionsCompactParams.errors)}`,
+              },
+            };
+          }
+
+          const p = params as SessionsCompactParams;
+          const key = String(p.key ?? "").trim();
+          if (!key) {
+            return {
+              ok: false,
+              error: {
+                code: ErrorCodes.INVALID_REQUEST,
+                message: "key required",
+              },
+            };
+          }
+
+          const maxLines =
+            typeof p.maxLines === "number" && Number.isFinite(p.maxLines)
+              ? Math.max(1, Math.floor(p.maxLines))
+              : 400;
+
+          const { storePath, store, entry } = loadSessionEntry(key);
+          const sessionId = entry?.sessionId;
+          if (!sessionId) {
+            return {
+              ok: true,
+              payloadJSON: JSON.stringify({
+                ok: true,
+                key,
+                compacted: false,
+                reason: "no sessionId",
+              }),
+            };
+          }
+
+          const filePath = resolveSessionTranscriptCandidates(sessionId, storePath)
+            .find((candidate) => fs.existsSync(candidate));
+          if (!filePath) {
+            return {
+              ok: true,
+              payloadJSON: JSON.stringify({
+                ok: true,
+                key,
+                compacted: false,
+                reason: "no transcript",
+              }),
+            };
+          }
+
+          const raw = fs.readFileSync(filePath, "utf-8");
+          const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
+          if (lines.length <= maxLines) {
+            return {
+              ok: true,
+              payloadJSON: JSON.stringify({
+                ok: true,
+                key,
+                compacted: false,
+                kept: lines.length,
+              }),
+            };
+          }
+
+          const archived = archiveFileOnDisk(filePath, "bak");
+          const keptLines = lines.slice(-maxLines);
+          fs.writeFileSync(filePath, `${keptLines.join("\n")}\n`, "utf-8");
+
+          // Token counts no longer match; clear so status + UI reflect reality after the next turn.
+          if (store[key]) {
+            delete store[key].inputTokens;
+            delete store[key].outputTokens;
+            delete store[key].totalTokens;
+            store[key].updatedAt = Date.now();
+            await saveSessionStore(storePath, store);
+          }
+
+          return {
+            ok: true,
+            payloadJSON: JSON.stringify({
+              ok: true,
+              key,
+              compacted: true,
+              archived,
+              kept: keptLines.length,
+            }),
+          };
         }
         case "chat.history": {
           const params = parseParams();
@@ -4056,6 +4280,15 @@ export async function startGatewayServer(
                 }
               }
 
+              if ("syncing" in p) {
+                const raw = p.syncing;
+                if (raw === null) {
+                  delete next.syncing;
+                } else if (raw !== undefined) {
+                  next.syncing = raw as boolean | string;
+                }
+              }
+
               store[key] = next;
               await saveSessionStore(storePath, store);
               const result: SessionsPatchResult = {
@@ -4065,6 +4298,199 @@ export async function startGatewayServer(
                 entry: next,
               };
               respond(true, result, undefined);
+              break;
+            }
+            case "sessions.reset": {
+              const params = (req.params ?? {}) as Record<string, unknown>;
+              if (!validateSessionsResetParams(params)) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(
+                    ErrorCodes.INVALID_REQUEST,
+                    `invalid sessions.reset params: ${formatValidationErrors(validateSessionsResetParams.errors)}`,
+                  ),
+                );
+                break;
+              }
+              const p = params as SessionsResetParams;
+              const key = String(p.key ?? "").trim();
+              if (!key) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(ErrorCodes.INVALID_REQUEST, "key required"),
+                );
+                break;
+              }
+
+              const { storePath, store, entry } = loadSessionEntry(key);
+              const now = Date.now();
+              const next: SessionEntry = {
+                sessionId: randomUUID(),
+                updatedAt: now,
+                systemSent: false,
+                abortedLastRun: false,
+                thinkingLevel: entry?.thinkingLevel,
+                verboseLevel: entry?.verboseLevel,
+                syncing: entry?.syncing,
+                model: entry?.model,
+                contextTokens: entry?.contextTokens,
+                lastChannel: entry?.lastChannel,
+                lastTo: entry?.lastTo,
+                skillsSnapshot: entry?.skillsSnapshot,
+              };
+              store[key] = next;
+              await saveSessionStore(storePath, store);
+              respond(true, { ok: true, key, entry: next }, undefined);
+              break;
+            }
+            case "sessions.delete": {
+              const params = (req.params ?? {}) as Record<string, unknown>;
+              if (!validateSessionsDeleteParams(params)) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(
+                    ErrorCodes.INVALID_REQUEST,
+                    `invalid sessions.delete params: ${formatValidationErrors(validateSessionsDeleteParams.errors)}`,
+                  ),
+                );
+                break;
+              }
+              const p = params as SessionsDeleteParams;
+              const key = String(p.key ?? "").trim();
+              if (!key) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(ErrorCodes.INVALID_REQUEST, "key required"),
+                );
+                break;
+              }
+
+              const deleteTranscript =
+                typeof p.deleteTranscript === "boolean"
+                  ? p.deleteTranscript
+                  : true;
+
+              const { storePath, store, entry } = loadSessionEntry(key);
+              const sessionId = entry?.sessionId;
+              const existed = Boolean(store[key]);
+              if (existed) delete store[key];
+              await saveSessionStore(storePath, store);
+
+              const archived: string[] = [];
+              if (deleteTranscript && sessionId) {
+                for (const candidate of resolveSessionTranscriptCandidates(
+                  sessionId,
+                  storePath,
+                )) {
+                  if (!fs.existsSync(candidate)) continue;
+                  try {
+                    archived.push(archiveFileOnDisk(candidate, "deleted"));
+                  } catch {
+                    // Best-effort.
+                  }
+                }
+              }
+
+              respond(
+                true,
+                { ok: true, key, deleted: existed, archived },
+                undefined,
+              );
+              break;
+            }
+            case "sessions.compact": {
+              const params = (req.params ?? {}) as Record<string, unknown>;
+              if (!validateSessionsCompactParams(params)) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(
+                    ErrorCodes.INVALID_REQUEST,
+                    `invalid sessions.compact params: ${formatValidationErrors(validateSessionsCompactParams.errors)}`,
+                  ),
+                );
+                break;
+              }
+              const p = params as SessionsCompactParams;
+              const key = String(p.key ?? "").trim();
+              if (!key) {
+                respond(
+                  false,
+                  undefined,
+                  errorShape(ErrorCodes.INVALID_REQUEST, "key required"),
+                );
+                break;
+              }
+
+              const maxLines =
+                typeof p.maxLines === "number" && Number.isFinite(p.maxLines)
+                  ? Math.max(1, Math.floor(p.maxLines))
+                  : 400;
+
+              const { storePath, store, entry } = loadSessionEntry(key);
+              const sessionId = entry?.sessionId;
+              if (!sessionId) {
+                respond(
+                  true,
+                  { ok: true, key, compacted: false, reason: "no sessionId" },
+                  undefined,
+                );
+                break;
+              }
+
+              const filePath = resolveSessionTranscriptCandidates(
+                sessionId,
+                storePath,
+              ).find((candidate) => fs.existsSync(candidate));
+              if (!filePath) {
+                respond(
+                  true,
+                  { ok: true, key, compacted: false, reason: "no transcript" },
+                  undefined,
+                );
+                break;
+              }
+
+              const raw = fs.readFileSync(filePath, "utf-8");
+              const lines = raw
+                .split(/\r?\n/)
+                .filter((l) => l.trim().length > 0);
+              if (lines.length <= maxLines) {
+                respond(
+                  true,
+                  { ok: true, key, compacted: false, kept: lines.length },
+                  undefined,
+                );
+                break;
+              }
+
+              const archived = archiveFileOnDisk(filePath, "bak");
+              const keptLines = lines.slice(-maxLines);
+              fs.writeFileSync(filePath, `${keptLines.join("\n")}\n`, "utf-8");
+
+              if (store[key]) {
+                delete store[key].inputTokens;
+                delete store[key].outputTokens;
+                delete store[key].totalTokens;
+                store[key].updatedAt = Date.now();
+                await saveSessionStore(storePath, store);
+              }
+
+              respond(
+                true,
+                {
+                  ok: true,
+                  key,
+                  compacted: true,
+                  archived,
+                  kept: keptLines.length,
+                },
+                undefined,
+              );
               break;
             }
             case "last-heartbeat": {
