@@ -3389,6 +3389,19 @@ describe("gateway server", () => {
     testSessionStorePath = storePath;
 
     await fs.writeFile(
+      path.join(dir, "sess-main.jsonl"),
+      Array.from({ length: 10 })
+        .map((_, idx) => JSON.stringify({ role: "user", content: `line ${idx}` }))
+        .join("\n") + "\n",
+      "utf-8",
+    );
+    await fs.writeFile(
+      path.join(dir, "sess-group.jsonl"),
+      JSON.stringify({ role: "user", content: "group line 0" }) + "\n",
+      "utf-8",
+    );
+
+    await fs.writeFile(
       storePath,
       JSON.stringify(
         {
@@ -3421,7 +3434,15 @@ describe("gateway server", () => {
     expect(
       (hello as unknown as { features?: { methods?: string[] } }).features
         ?.methods,
-    ).toEqual(expect.arrayContaining(["sessions.list", "sessions.patch"]));
+    ).toEqual(
+      expect.arrayContaining([
+        "sessions.list",
+        "sessions.patch",
+        "sessions.reset",
+        "sessions.delete",
+        "sessions.compact",
+      ]),
+    );
 
     const list1 = await rpcReq<{
       path: string;
@@ -3482,6 +3503,63 @@ describe("gateway server", () => {
     const main2 = list2.payload?.sessions.find((s) => s.key === "main");
     expect(main2?.thinkingLevel).toBe("medium");
     expect(main2?.verboseLevel).toBeUndefined();
+
+    const syncPatched = await rpcReq<{ ok: true; key: string }>(
+      ws,
+      "sessions.patch",
+      { key: "main", syncing: true },
+    );
+    expect(syncPatched.ok).toBe(true);
+
+    const list3 = await rpcReq<{
+      sessions: Array<{ key: string; syncing?: boolean | string }>;
+    }>(ws, "sessions.list", {});
+    expect(list3.ok).toBe(true);
+    const main3 = list3.payload?.sessions.find((s) => s.key === "main");
+    expect(main3?.syncing).toBe(true);
+
+    const compacted = await rpcReq<{ ok: true; compacted: boolean }>(
+      ws,
+      "sessions.compact",
+      { key: "main", maxLines: 3 },
+    );
+    expect(compacted.ok).toBe(true);
+    expect(compacted.payload?.compacted).toBe(true);
+    const compactedLines = (
+      await fs.readFile(path.join(dir, "sess-main.jsonl"), "utf-8")
+    )
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    expect(compactedLines).toHaveLength(3);
+    const filesAfterCompact = await fs.readdir(dir);
+    expect(filesAfterCompact.some((f) => f.startsWith("sess-main.jsonl.bak.")))
+      .toBe(true);
+
+    const deleted = await rpcReq<{ ok: true; deleted: boolean }>(
+      ws,
+      "sessions.delete",
+      { key: "group:dev" },
+    );
+    expect(deleted.ok).toBe(true);
+    expect(deleted.payload?.deleted).toBe(true);
+    const listAfterDelete = await rpcReq<{
+      sessions: Array<{ key: string }>;
+    }>(ws, "sessions.list", {});
+    expect(listAfterDelete.ok).toBe(true);
+    expect(listAfterDelete.payload?.sessions.some((s) => s.key === "group:dev"))
+      .toBe(false);
+    const filesAfterDelete = await fs.readdir(dir);
+    expect(filesAfterDelete.some((f) => f.startsWith("sess-group.jsonl.deleted.")))
+      .toBe(true);
+
+    const reset = await rpcReq<{ ok: true; key: string; entry: { sessionId: string } }>(
+      ws,
+      "sessions.reset",
+      { key: "main" },
+    );
+    expect(reset.ok).toBe(true);
+    expect(reset.payload?.key).toBe("main");
+    expect(reset.payload?.entry.sessionId).not.toBe("sess-main");
 
     const badThinking = await rpcReq(ws, "sessions.patch", {
       key: "main",

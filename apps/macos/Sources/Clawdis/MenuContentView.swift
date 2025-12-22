@@ -17,7 +17,10 @@ struct MenuContent: View {
     @State private var availableMics: [AudioInputDevice] = []
     @State private var loadingMics = false
     @State private var sessionMenu: [SessionRow] = []
+    @State private var sessionStorePath: String?
     @State private var browserControlEnabled = true
+    private let sessionMenuItemWidth: CGFloat = 320
+    private let sessionMenuActiveWindowSeconds: TimeInterval = 24 * 60 * 60
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -28,6 +31,7 @@ struct MenuContent: View {
                 }
             }
             .disabled(self.state.connectionMode == .unconfigured)
+            self.sessionsSection
             Divider()
             Toggle(isOn: self.heartbeatsBinding) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -125,55 +129,6 @@ struct MenuContent: View {
     private var debugMenu: some View {
         if self.state.debugPaneEnabled {
             Menu("Debug") {
-                Menu {
-                    ForEach(self.sessionMenu) { row in
-                        Menu(row.key) {
-                            Menu("Thinking") {
-                                ForEach(["low", "medium", "high", "default"], id: \.self) { level in
-                                    let normalized = level == "default" ? nil : level
-                                    Button {
-                                        Task {
-                                            try? await DebugActions.updateSession(
-                                                key: row.key,
-                                                thinking: normalized,
-                                                verbose: row.verboseLevel)
-                                            await self.reloadSessionMenu()
-                                        }
-                                    } label: {
-                                        let checkmark = row.thinkingLevel == normalized ? "checkmark" : ""
-                                        Label(level.capitalized, systemImage: checkmark)
-                                    }
-                                }
-                            }
-                            Menu("Verbose") {
-                                ForEach(["on", "off", "default"], id: \.self) { level in
-                                    let normalized = level == "default" ? nil : level
-                                    Button {
-                                        Task {
-                                            try? await DebugActions.updateSession(
-                                                key: row.key,
-                                                thinking: row.thinkingLevel,
-                                                verbose: normalized)
-                                            await self.reloadSessionMenu()
-                                        }
-                                    } label: {
-                                        let checkmark = row.verboseLevel == normalized ? "checkmark" : ""
-                                        Label(level.capitalized, systemImage: checkmark)
-                                    }
-                                }
-                            }
-                            Button {
-                                DebugActions.openSessionStoreInCode()
-                            } label: {
-                                Label("Open Session Log", systemImage: "doc.text")
-                            }
-                        }
-                    }
-                    Divider()
-                } label: {
-                    Label("Sessions", systemImage: "clock.arrow.circlepath")
-                }
-                Divider()
                 Button {
                     DebugActions.openConfigFolder()
                 } label: {
@@ -235,6 +190,201 @@ struct MenuContent: View {
                 } label: {
                     Label("Restart App", systemImage: "arrow.triangle.2.circlepath")
                 }
+            }
+        }
+    }
+
+    private var sessionsSection: some View {
+        Group {
+            Divider()
+
+            if self.sessionMenu.isEmpty {
+                Text("No active sessions")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .disabled(true)
+            } else {
+                ForEach(self.sessionMenu) { row in
+                    Menu {
+                        self.sessionSubmenu(for: row)
+                    } label: {
+                        MenuHostedItem(
+                            width: self.sessionMenuItemWidth,
+                            rootView: AnyView(SessionMenuLabelView(row: row)))
+                    }
+                }
+            }
+
+            Button {
+                Task { @MainActor in
+                    guard let key = SessionActions.promptForSessionKey() else { return }
+                    do {
+                        try await SessionActions.createSession(key: key)
+                        await self.reloadSessionMenu()
+                    } catch {
+                        SessionActions.presentError(title: "Create session failed", error: error)
+                    }
+                }
+            } label: {
+                Label("New Session…", systemImage: "plus.circle")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sessionSubmenu(for row: SessionRow) -> some View {
+        Menu("Syncing") {
+            ForEach(["on", "off", "default"], id: \.self) { option in
+                Button {
+                    Task {
+                        do {
+                            let value: SessionSyncingValue? = switch option {
+                            case "on": .bool(true)
+                            case "off": .bool(false)
+                            default: nil
+                            }
+                            try await SessionActions.patchSession(key: row.key, syncing: .some(value))
+                            await self.reloadSessionMenu()
+                        } catch {
+                            await MainActor.run {
+                                SessionActions.presentError(title: "Update syncing failed", error: error)
+                            }
+                        }
+                    }
+                } label: {
+                    let normalized: SessionSyncingValue? = switch option {
+                    case "on": .bool(true)
+                    case "off": .bool(false)
+                    default: nil
+                    }
+                    let isSelected: Bool = {
+                        switch normalized {
+                        case .none:
+                            row.syncing == nil
+                        case let .some(value):
+                            switch value {
+                            case .bool(true):
+                                row.syncing?.isOn == true
+                            case .bool(false):
+                                row.syncing?.isOff == true
+                            case let .string(v):
+                                row.syncing?.label == v
+                            }
+                        }
+                    }()
+                    Label(option.capitalized, systemImage: isSelected ? "checkmark" : "")
+                }
+            }
+        }
+
+        Menu("Thinking") {
+            ForEach(["off", "minimal", "low", "medium", "high", "default"], id: \.self) { level in
+                let normalized = level == "default" ? nil : level
+                Button {
+                    Task {
+                        do {
+                            try await SessionActions.patchSession(key: row.key, thinking: .some(normalized))
+                            await self.reloadSessionMenu()
+                        } catch {
+                            await MainActor.run {
+                                SessionActions.presentError(title: "Update thinking failed", error: error)
+                            }
+                        }
+                    }
+                } label: {
+                    let checkmark = row.thinkingLevel == normalized ? "checkmark" : ""
+                    Label(level.capitalized, systemImage: checkmark)
+                }
+            }
+        }
+
+        Menu("Verbose") {
+            ForEach(["on", "off", "default"], id: \.self) { level in
+                let normalized = level == "default" ? nil : level
+                Button {
+                    Task {
+                        do {
+                            try await SessionActions.patchSession(key: row.key, verbose: .some(normalized))
+                            await self.reloadSessionMenu()
+                        } catch {
+                            await MainActor.run {
+                                SessionActions.presentError(title: "Update verbose failed", error: error)
+                            }
+                        }
+                    }
+                } label: {
+                    let checkmark = row.verboseLevel == normalized ? "checkmark" : ""
+                    Label(level.capitalized, systemImage: checkmark)
+                }
+            }
+        }
+
+        if self.state.debugPaneEnabled, self.state.connectionMode == .local, let sessionId = row.sessionId, !sessionId.isEmpty {
+            Button {
+                SessionActions.openSessionLogInCode(sessionId: sessionId, storePath: self.sessionStorePath)
+            } label: {
+                Label("Open Session Log", systemImage: "doc.text")
+            }
+        }
+
+        Divider()
+
+        Button {
+            Task { @MainActor in
+                guard SessionActions.confirmDestructiveAction(
+                    title: "Reset session?",
+                    message: "Starts a new session id for “\(row.key)”.",
+                    action: "Reset")
+                else { return }
+
+                do {
+                    try await SessionActions.resetSession(key: row.key)
+                    await self.reloadSessionMenu()
+                } catch {
+                    SessionActions.presentError(title: "Reset failed", error: error)
+                }
+            }
+        } label: {
+            Label("Reset Session", systemImage: "arrow.counterclockwise")
+        }
+
+        Button {
+            Task { @MainActor in
+                guard SessionActions.confirmDestructiveAction(
+                    title: "Compact session log?",
+                    message: "Keeps the last 400 lines; archives the old file.",
+                    action: "Compact")
+                else { return }
+
+                do {
+                    try await SessionActions.compactSession(key: row.key, maxLines: 400)
+                    await self.reloadSessionMenu()
+                } catch {
+                    SessionActions.presentError(title: "Compact failed", error: error)
+                }
+            }
+        } label: {
+            Label("Compact Session Log", systemImage: "scissors")
+        }
+
+        if row.key != "main" {
+            Button(role: .destructive) {
+                Task { @MainActor in
+                    guard SessionActions.confirmDestructiveAction(
+                        title: "Delete session?",
+                        message: "Deletes the “\(row.key)” entry and archives its transcript.",
+                        action: "Delete")
+                    else { return }
+
+                    do {
+                        try await SessionActions.deleteSession(key: row.key)
+                        await self.reloadSessionMenu()
+                    } catch {
+                        SessionActions.presentError(title: "Delete failed", error: error)
+                    }
+                }
+            } label: {
+                Label("Delete Session", systemImage: "trash")
             }
         }
     }
@@ -427,7 +577,24 @@ struct MenuContent: View {
 
     @MainActor
     private func reloadSessionMenu() async {
-        self.sessionMenu = await DebugActions.recentSessions()
+        do {
+            let snapshot = try await SessionLoader.loadSnapshot(limit: 32)
+            self.sessionStorePath = snapshot.storePath
+            let now = Date()
+            let active = snapshot.rows.filter { row in
+                if row.key == "main" { return true }
+                guard let updatedAt = row.updatedAt else { return false }
+                return now.timeIntervalSince(updatedAt) <= self.sessionMenuActiveWindowSeconds
+            }
+            self.sessionMenu = active.sorted { lhs, rhs in
+                if lhs.key == "main" { return true }
+                if rhs.key == "main" { return false }
+                return (lhs.updatedAt ?? .distantPast) > (rhs.updatedAt ?? .distantPast)
+            }
+        } catch {
+            self.sessionStorePath = nil
+            self.sessionMenu = []
+        }
     }
 
     @MainActor

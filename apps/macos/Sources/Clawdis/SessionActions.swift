@@ -1,0 +1,133 @@
+import AppKit
+import Foundation
+
+enum SessionActions {
+    static func patchSession(
+        key: String,
+        thinking: String?? = nil,
+        verbose: String?? = nil,
+        syncing: SessionSyncingValue?? = nil) async throws
+    {
+        var params: [String: AnyHashable] = ["key": AnyHashable(key)]
+
+        if let thinking {
+            params["thinkingLevel"] = thinking.map(AnyHashable.init) ?? AnyHashable(NSNull())
+        }
+        if let verbose {
+            params["verboseLevel"] = verbose.map(AnyHashable.init) ?? AnyHashable(NSNull())
+        }
+        if let syncing {
+            let payload: AnyHashable = {
+                switch syncing {
+                case .none:
+                    AnyHashable(NSNull())
+                case let .some(value):
+                    switch value {
+                    case let .bool(v): AnyHashable(v)
+                    case let .string(v): AnyHashable(v)
+                    }
+                }
+            }()
+            params["syncing"] = payload
+        }
+
+        _ = try await ControlChannel.shared.request(method: "sessions.patch", params: params)
+    }
+
+    static func createSession(key: String) async throws {
+        _ = try await ControlChannel.shared.request(
+            method: "sessions.patch",
+            params: ["key": AnyHashable(key)])
+    }
+
+    static func resetSession(key: String) async throws {
+        _ = try await ControlChannel.shared.request(
+            method: "sessions.reset",
+            params: ["key": AnyHashable(key)])
+    }
+
+    static func deleteSession(key: String) async throws {
+        _ = try await ControlChannel.shared.request(
+            method: "sessions.delete",
+            params: ["key": AnyHashable(key), "deleteTranscript": AnyHashable(true)])
+    }
+
+    static func compactSession(key: String, maxLines: Int = 400) async throws {
+        _ = try await ControlChannel.shared.request(
+            method: "sessions.compact",
+            params: ["key": AnyHashable(key), "maxLines": AnyHashable(maxLines)])
+    }
+
+    @MainActor
+    static func confirmDestructiveAction(title: String, message: String, action: String) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: action)
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .warning
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    @MainActor
+    static func promptForSessionKey() -> String? {
+        let alert = NSAlert()
+        alert.messageText = "New Session"
+        alert.informativeText = "Create a new session key (e.g. \"main\", \"group:dev\", \"scratch\")."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "session key"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Create")
+        alert.addButton(withTitle: "Cancel")
+        alert.alertStyle = .informational
+        let result = alert.runModal()
+        guard result == .alertFirstButtonReturn else { return nil }
+        let trimmed = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    @MainActor
+    static func presentError(title: String, error: Error) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        alert.addButton(withTitle: "OK")
+        alert.alertStyle = .warning
+        alert.runModal()
+    }
+
+    @MainActor
+    static func openSessionLogInCode(sessionId: String, storePath: String?) {
+        let candidates: [URL] = {
+            var urls: [URL] = []
+            if let storePath, !storePath.isEmpty {
+                let dir = URL(fileURLWithPath: storePath).deletingLastPathComponent()
+                urls.append(dir.appendingPathComponent("\(sessionId).jsonl"))
+            }
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            urls.append(home.appendingPathComponent(".clawdis/sessions/\(sessionId).jsonl"))
+            urls.append(home.appendingPathComponent(".pi/agent/sessions/\(sessionId).jsonl"))
+            urls.append(home.appendingPathComponent(".tau/agent/sessions/clawdis/\(sessionId).jsonl"))
+            return urls
+        }()
+
+        let existing = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+        guard let url = existing else {
+            let alert = NSAlert()
+            alert.messageText = "Session log not found"
+            alert.informativeText = sessionId
+            alert.runModal()
+            return
+        }
+
+        let proc = Process()
+        proc.launchPath = "/usr/bin/env"
+        proc.arguments = ["code", url.path]
+        if (try? proc.run()) != nil {
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+}
+

@@ -15,7 +15,6 @@ struct ClawdisApp: App {
     @State private var statusItem: NSStatusItem?
     @State private var isMenuPresented = false
     @State private var isPanelVisible = false
-    @State private var menuInjector = MenuContextCardInjector.shared
     @State private var tailscaleService = TailscaleService.shared
 
     @MainActor
@@ -49,7 +48,6 @@ struct ClawdisApp: App {
             self.statusItem = item
             self.applyStatusItemAppearance(paused: self.state.isPaused)
             self.installStatusItemMouseHandler(for: item)
-            self.menuInjector.install(into: item)
             self.updateHoverHUDSuppression()
         }
         .onChange(of: self.state.isPaused) { _, paused in
