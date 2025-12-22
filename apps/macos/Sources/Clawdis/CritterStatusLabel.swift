@@ -3,6 +3,7 @@ import SwiftUI
 
 struct CritterStatusLabel: View {
     var isPaused: Bool
+    var isSleeping: Bool
     var isWorking: Bool
     var earBoostActive: Bool
     var blinkTick: Int
@@ -25,6 +26,10 @@ struct CritterStatusLabel: View {
         self.iconState.isWorking || self.isWorking
     }
 
+    private var effectiveAnimationsEnabled: Bool {
+        self.animationsEnabled && !self.isSleeping
+    }
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             self.iconImage
@@ -34,7 +39,7 @@ struct CritterStatusLabel: View {
                 // Avoid Combine's TimerPublisher here: on macOS 26.2 we've seen crashes inside executor checks
                 // triggered by its callbacks. Drive periodic updates via a Swift-concurrency task instead.
                 .task(id: self.tickTaskID) {
-                    guard self.animationsEnabled, !self.earBoostActive else {
+                    guard self.effectiveAnimationsEnabled, !self.earBoostActive else {
                         await MainActor.run { self.resetMotion() }
                         return
                     }
@@ -47,24 +52,27 @@ struct CritterStatusLabel: View {
                 }
                 .onChange(of: self.isPaused) { _, _ in self.resetMotion() }
                 .onChange(of: self.blinkTick) { _, _ in
-                    guard !self.earBoostActive else { return }
+                    guard self.effectiveAnimationsEnabled, !self.earBoostActive else { return }
                     self.blink()
                 }
                 .onChange(of: self.sendCelebrationTick) { _, _ in
-                    guard !self.earBoostActive else { return }
+                    guard self.effectiveAnimationsEnabled, !self.earBoostActive else { return }
                     self.wiggleLegs()
                 }
                 .onChange(of: self.animationsEnabled) { _, enabled in
-                    if enabled {
+                    if enabled, !self.isSleeping {
                         self.scheduleRandomTimers(from: Date())
                     } else {
                         self.resetMotion()
                     }
                 }
+                .onChange(of: self.isSleeping) { _, _ in
+                    self.resetMotion()
+                }
                 .onChange(of: self.earBoostActive) { _, active in
                     if active {
                         self.resetMotion()
-                    } else if self.animationsEnabled {
+                    } else if self.effectiveAnimationsEnabled {
                         self.scheduleRandomTimers(from: Date())
                     }
                 }
@@ -81,11 +89,11 @@ struct CritterStatusLabel: View {
 
     private var tickTaskID: Int {
         // Ensure SwiftUI restarts (and cancels) the task when these change.
-        (self.animationsEnabled ? 1 : 0) | (self.earBoostActive ? 2 : 0)
+        (self.effectiveAnimationsEnabled ? 1 : 0) | (self.earBoostActive ? 2 : 0)
     }
 
     private func tick(_ now: Date) {
-        guard self.animationsEnabled, !self.earBoostActive else {
+        guard self.effectiveAnimationsEnabled, !self.earBoostActive else {
             self.resetMotion()
             return
         }
@@ -126,6 +134,10 @@ struct CritterStatusLabel: View {
 
         if self.isPaused {
             return Image(nsImage: CritterIconRenderer.makeIcon(blink: 0, badge: nil))
+        }
+
+        if self.isSleeping {
+            return Image(nsImage: CritterIconRenderer.makeIcon(blink: 1, badge: nil))
         }
 
         return Image(nsImage: CritterIconRenderer.makeIcon(
@@ -216,11 +228,12 @@ struct CritterStatusLabel: View {
     }
 
     private var gatewayNeedsAttention: Bool {
+        if self.isSleeping { return false }
         switch self.gatewayStatus {
         case .failed, .stopped:
-            !self.isPaused
+            return !self.isPaused
         case .starting, .running, .attachedExisting:
-            false
+            return false
         }
     }
 

@@ -18,6 +18,8 @@ struct MenuContent: View {
     @State private var loadingMics = false
     @State private var sessionMenu: [SessionRow] = []
     @State private var sessionStorePath: String?
+    @State private var sessionLoading = true
+    @State private var sessionErrorText: String?
     @State private var browserControlEnabled = true
     private let sessionMenuItemWidth: CGFloat = 320
     private let sessionMenuActiveWindowSeconds: TimeInterval = 24 * 60 * 60
@@ -31,7 +33,9 @@ struct MenuContent: View {
                 }
             }
             .disabled(self.state.connectionMode == .unconfigured)
+
             self.sessionsSection
+
             Divider()
             Toggle(isOn: self.heartbeatsBinding) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -196,12 +200,39 @@ struct MenuContent: View {
 
     private var sessionsSection: some View {
         Group {
-            Divider()
+            MenuHostedItem(
+                width: self.sessionMenuItemWidth,
+                rootView: AnyView(MenuSessionsHeaderView(
+                    count: self.sessionMenu.count,
+                    statusText: self.sessionLoading
+                        ? "Loading sessions…"
+                        : (self.sessionMenu.isEmpty ? nil : self.sessionErrorText))))
+                .disabled(true)
 
-            if self.sessionMenu.isEmpty {
-                Text("No active sessions")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if self.sessionMenu.isEmpty, !self.sessionLoading, let error = self.sessionErrorText, !error.isEmpty {
+                MenuHostedItem(
+                    width: self.sessionMenuItemWidth,
+                    rootView: AnyView(
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.leading, 20)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 6)
+                            .frame(minWidth: 300, alignment: .leading)))
+                    .disabled(true)
+            } else if self.sessionMenu.isEmpty, !self.sessionLoading, self.sessionErrorText == nil {
+                MenuHostedItem(
+                    width: self.sessionMenuItemWidth,
+                    rootView: AnyView(Text("No active sessions")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 20)
+                        .padding(.trailing, 10)
+                        .padding(.vertical, 6)
+                        .frame(minWidth: 300, alignment: .leading)))
                     .disabled(true)
             } else {
                 ForEach(self.sessionMenu) { row in
@@ -373,6 +404,45 @@ struct MenuContent: View {
                 Label("Delete Session", systemImage: "trash")
             }
         }
+    }
+
+    @MainActor
+    private func reloadSessionMenu() async {
+        self.sessionLoading = true
+        self.sessionErrorText = nil
+
+        do {
+            let snapshot = try await SessionLoader.loadSnapshot(limit: 32)
+            self.sessionStorePath = snapshot.storePath
+            let now = Date()
+            let active = snapshot.rows.filter { row in
+                if row.key == "main" { return true }
+                guard let updatedAt = row.updatedAt else { return false }
+                return now.timeIntervalSince(updatedAt) <= self.sessionMenuActiveWindowSeconds
+            }
+            self.sessionMenu = active.sorted { lhs, rhs in
+                if lhs.key == "main" { return true }
+                if rhs.key == "main" { return false }
+                return (lhs.updatedAt ?? .distantPast) > (rhs.updatedAt ?? .distantPast)
+            }
+        } catch {
+            // Keep the previous snapshot (if any) so the menu doesn't go empty while the gateway is flaky.
+            self.sessionErrorText = self.compactSessionError(error)
+        }
+
+        self.sessionLoading = false
+    }
+
+    private func compactSessionError(_ error: Error) -> String {
+        if let loadError = error as? SessionLoadError {
+            switch loadError {
+            case .gatewayUnavailable:
+                return "Sessions unavailable — gateway unreachable"
+            case .decodeFailed:
+                return "Sessions unavailable — invalid payload"
+            }
+        }
+        return "Sessions unavailable"
     }
 
     private func open(tab: SettingsTab) {
@@ -559,28 +629,6 @@ struct MenuContent: View {
             return "Auto-detect (\(host))"
         }
         return "System default"
-    }
-
-    @MainActor
-    private func reloadSessionMenu() async {
-        do {
-            let snapshot = try await SessionLoader.loadSnapshot(limit: 32)
-            self.sessionStorePath = snapshot.storePath
-            let now = Date()
-            let active = snapshot.rows.filter { row in
-                if row.key == "main" { return true }
-                guard let updatedAt = row.updatedAt else { return false }
-                return now.timeIntervalSince(updatedAt) <= self.sessionMenuActiveWindowSeconds
-            }
-            self.sessionMenu = active.sorted { lhs, rhs in
-                if lhs.key == "main" { return true }
-                if rhs.key == "main" { return false }
-                return (lhs.updatedAt ?? .distantPast) > (rhs.updatedAt ?? .distantPast)
-            }
-        } catch {
-            self.sessionStorePath = nil
-            self.sessionMenu = []
-        }
     }
 
     @MainActor

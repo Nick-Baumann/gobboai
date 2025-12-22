@@ -11,6 +11,7 @@ struct ClawdisApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var state: AppState
     private let gatewayManager = GatewayProcessManager.shared
+    private let controlChannel = ControlChannel.shared
     private let activityStore = WorkActivityStore.shared
     @State private var statusItem: NSStatusItem?
     @State private var isMenuPresented = false
@@ -35,28 +36,35 @@ struct ClawdisApp: App {
         MenuBarExtra { MenuContent(state: self.state, updater: self.delegate.updaterController) } label: {
             CritterStatusLabel(
                 isPaused: self.state.isPaused,
+                isSleeping: self.isGatewaySleeping,
                 isWorking: self.state.isWorking,
                 earBoostActive: self.state.earBoostActive,
                 blinkTick: self.state.blinkTick,
                 sendCelebrationTick: self.state.sendCelebrationTick,
                 gatewayStatus: self.gatewayManager.status,
-                animationsEnabled: self.state.iconAnimationsEnabled,
+                animationsEnabled: self.state.iconAnimationsEnabled && !self.isGatewaySleeping,
                 iconState: self.effectiveIconState)
         }
         .menuBarExtraStyle(.menu)
         .menuBarExtraAccess(isPresented: self.$isMenuPresented) { item in
             self.statusItem = item
-            self.applyStatusItemAppearance(paused: self.state.isPaused)
+            self.applyStatusItemAppearance(paused: self.state.isPaused, sleeping: self.isGatewaySleeping)
             self.installStatusItemMouseHandler(for: item)
             self.updateHoverHUDSuppression()
         }
         .onChange(of: self.state.isPaused) { _, paused in
-            self.applyStatusItemAppearance(paused: paused)
+            self.applyStatusItemAppearance(paused: paused, sleeping: self.isGatewaySleeping)
             if self.state.connectionMode == .local {
                 self.gatewayManager.setActive(!paused)
             } else {
                 self.gatewayManager.stop()
             }
+        }
+        .onChange(of: self.controlChannel.state) { _, _ in
+            self.applyStatusItemAppearance(paused: self.state.isPaused, sleeping: self.isGatewaySleeping)
+        }
+        .onChange(of: self.gatewayManager.status) { _, _ in
+            self.applyStatusItemAppearance(paused: self.state.isPaused, sleeping: self.isGatewaySleeping)
         }
         .onChange(of: self.state.connectionMode) { _, mode in
             Task { await ConnectionModeCoordinator.shared.apply(mode: mode, paused: self.state.isPaused) }
@@ -75,8 +83,27 @@ struct ClawdisApp: App {
         }
     }
 
-    private func applyStatusItemAppearance(paused: Bool) {
-        self.statusItem?.button?.appearsDisabled = paused
+    private func applyStatusItemAppearance(paused: Bool, sleeping: Bool) {
+        self.statusItem?.button?.appearsDisabled = paused || sleeping
+    }
+
+    private var isGatewaySleeping: Bool {
+        if self.state.isPaused { return false }
+        switch self.state.connectionMode {
+        case .unconfigured:
+            return true
+        case .remote:
+            if case .connected = self.controlChannel.state { return false }
+            return true
+        case .local:
+            switch self.gatewayManager.status {
+            case .running, .starting, .attachedExisting:
+                if case .connected = self.controlChannel.state { return false }
+                return true
+            case .failed, .stopped:
+                return true
+            }
+        }
     }
 
     @MainActor
