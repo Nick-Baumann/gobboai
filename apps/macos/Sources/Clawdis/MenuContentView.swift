@@ -200,6 +200,21 @@ struct MenuContent: View {
 
     private var sessionsSection: some View {
         Group {
+            if !self.isGatewayConnected {
+                MenuHostedItem(
+                    width: self.sessionMenuItemWidth,
+                    rootView: AnyView(
+                        Label("No connection to gateway", systemImage: "wifi.slash")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .padding(.leading, 20)
+                            .padding(.trailing, 10)
+                            .padding(.vertical, 6)
+                            .frame(minWidth: 300, alignment: .leading)))
+                    .disabled(true)
+            } else {
             MenuHostedItem(
                 width: self.sessionMenuItemWidth,
                 rootView: AnyView(MenuSessionsHeaderView(
@@ -245,7 +260,13 @@ struct MenuContent: View {
                     }
                 }
             }
+            }
         }
+    }
+
+    private var isGatewayConnected: Bool {
+        if case .connected = self.controlChannel.state { return true }
+        return false
     }
 
     @ViewBuilder
