@@ -116,14 +116,11 @@ export function registerGatewayCli(program: Command) {
       }
       const authModeRaw = opts.auth ? String(opts.auth) : undefined;
       const authMode =
-        authModeRaw === "token" ||
-        authModeRaw === "password"
+        authModeRaw === "token" || authModeRaw === "password"
           ? authModeRaw
           : null;
       if (authModeRaw && !authMode) {
-        defaultRuntime.error(
-          'Invalid --auth (use "token" or "password")',
-        );
+        defaultRuntime.error('Invalid --auth (use "token" or "password")');
         defaultRuntime.exit(1);
         return;
       }
@@ -334,14 +331,11 @@ export function registerGatewayCli(program: Command) {
       }
       const authModeRaw = opts.auth ? String(opts.auth) : undefined;
       const authMode =
-        authModeRaw === "token" ||
-        authModeRaw === "password"
+        authModeRaw === "token" || authModeRaw === "password"
           ? authModeRaw
           : null;
       if (authModeRaw && !authMode) {
-        defaultRuntime.error(
-          'Invalid --auth (use "token" or "password")',
-        );
+        defaultRuntime.error('Invalid --auth (use "token" or "password")');
         defaultRuntime.exit(1);
         return;
       }

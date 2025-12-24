@@ -17,8 +17,8 @@ import {
 } from "../agents/defaults.js";
 import {
   loadModelCatalog,
-  resetModelCatalogCacheForTest,
   type ModelCatalogEntry,
+  resetModelCatalogCacheForTest,
 } from "../agents/model-catalog.js";
 import { installSkill } from "../agents/skills-install.js";
 import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
@@ -1393,11 +1393,7 @@ export async function startGatewayServer(
       return;
     }
     const { e164, jid } = readWebSelfId();
-    const identity = e164
-      ? e164
-      : jid
-        ? `jid ${jid}`
-        : "unknown";
+    const identity = e164 ? e164 : jid ? `jid ${jid}` : "unknown";
     logWhatsApp.info(`starting provider (${identity})`);
     whatsappAbort = new AbortController();
     whatsappRuntime = {

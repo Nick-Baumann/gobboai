@@ -1,5 +1,5 @@
-import { resolveClawdisAgentDir } from "./agent-paths.js";
 import { type ClawdisConfig, loadConfig } from "../config/config.js";
+import { resolveClawdisAgentDir } from "./agent-paths.js";
 import { ensureClawdisModelsJson } from "./models-config.js";
 
 export type ModelCatalogEntry = {
