@@ -12,8 +12,8 @@ vi.mock("../agents/model-catalog.js", () => ({
   loadModelCatalog: vi.fn(),
 }));
 
-import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
+import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import {
   loadSessionStore,
   resolveSessionKey,
@@ -277,10 +277,7 @@ describe("directive parsing", () => {
             provider: "anthropic",
             model: "claude-opus-4-5",
             workspace: path.join(home, "clawd"),
-            allowedModels: [
-              "anthropic/claude-opus-4-5",
-              "openai/gpt-4.1-mini",
-            ],
+            allowedModels: ["anthropic/claude-opus-4-5", "openai/gpt-4.1-mini"],
           },
           session: { store: storePath },
         },
@@ -316,7 +313,7 @@ describe("directive parsing", () => {
       const text = Array.isArray(res) ? res[0]?.text : res?.text;
       expect(text).toContain("Model set to openai/gpt-4.1-mini");
       const store = loadSessionStore(storePath);
-      const entry = store["main"];
+      const entry = store.main;
       expect(entry.modelOverride).toBe("gpt-4.1-mini");
       expect(entry.providerOverride).toBe("openai");
       expect(runEmbeddedPiAgent).not.toHaveBeenCalled();

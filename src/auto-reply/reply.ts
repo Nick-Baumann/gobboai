@@ -44,6 +44,7 @@ import {
   normalizeGroupActivation,
   parseActivationCommand,
 } from "./group-activation.js";
+import { extractModelDirective } from "./model.js";
 import { buildStatusMessage } from "./status.js";
 import type { MsgContext, TemplateContext } from "./templating.js";
 import {
@@ -52,7 +53,6 @@ import {
   type ThinkLevel,
   type VerboseLevel,
 } from "./thinking.js";
-import { extractModelDirective } from "./model.js";
 import { SILENT_REPLY_TOKEN } from "./tokens.js";
 import { isAudio, transcribeInboundAudio } from "./transcription.js";
 import type { GetReplyOptions, ReplyPayload } from "./types.js";
@@ -199,9 +199,7 @@ export async function getReplyFromConfig(
   const configuredTypingSeconds =
     agentCfg?.typingIntervalSeconds ?? sessionCfg?.typingIntervalSeconds;
   const typingIntervalSeconds =
-    typeof configuredTypingSeconds === "number"
-      ? configuredTypingSeconds
-      : 6;
+    typeof configuredTypingSeconds === "number" ? configuredTypingSeconds : 6;
   const typingIntervalMs = typingIntervalSeconds * 1000;
   const cleanupTyping = () => {
     if (typingTimer) {
@@ -393,7 +391,8 @@ export async function getReplyFromConfig(
   const hasStoredOverride = Boolean(
     sessionEntry?.modelOverride || sessionEntry?.providerOverride,
   );
-  const needsModelCatalog = hasModelDirective || hasAllowlist || hasStoredOverride;
+  const needsModelCatalog =
+    hasModelDirective || hasAllowlist || hasStoredOverride;
   let allowedModelKeys = new Set<string>();
   let allowedModelCatalog: Awaited<ReturnType<typeof loadModelCatalog>> = [];
   let resetModelOverride = false;
@@ -467,7 +466,8 @@ export async function getReplyFromConfig(
       }
       for (const entry of allowedModelCatalog) {
         const label = `${entry.provider}/${entry.id}`;
-        const suffix = entry.name && entry.name !== entry.id ? ` — ${entry.name}` : "";
+        const suffix =
+          entry.name && entry.name !== entry.id ? ` — ${entry.name}` : "";
         lines.push(`- ${label}${suffix}`);
       }
       cleanupTyping();
@@ -585,7 +585,8 @@ export async function getReplyFromConfig(
         const key = modelKey(parsed.provider, parsed.model);
         if (allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
           const isDefault =
-            parsed.provider === defaultProvider && parsed.model === defaultModel;
+            parsed.provider === defaultProvider &&
+            parsed.model === defaultModel;
           if (isDefault) {
             delete sessionEntry.providerOverride;
             delete sessionEntry.modelOverride;
@@ -767,46 +768,41 @@ export async function getReplyFromConfig(
   const shouldInjectGroupIntro =
     isGroupChat &&
     (isFirstTurnInSession || sessionEntry?.groupActivationNeedsSystemIntro);
-  const groupIntro =
-    shouldInjectGroupIntro
-      ? (() => {
-          const activation =
-            normalizeGroupActivation(sessionEntry?.groupActivation) ??
-            defaultGroupActivation();
-          const subject = sessionCtx.GroupSubject?.trim();
-          const members = sessionCtx.GroupMembers?.trim();
-          const subjectLine = subject
-            ? `You are replying inside the WhatsApp group "${subject}".`
-            : "You are replying inside a WhatsApp group chat.";
-          const membersLine = members
-            ? `Group members: ${members}.`
+  const groupIntro = shouldInjectGroupIntro
+    ? (() => {
+        const activation =
+          normalizeGroupActivation(sessionEntry?.groupActivation) ??
+          defaultGroupActivation();
+        const subject = sessionCtx.GroupSubject?.trim();
+        const members = sessionCtx.GroupMembers?.trim();
+        const subjectLine = subject
+          ? `You are replying inside the WhatsApp group "${subject}".`
+          : "You are replying inside a WhatsApp group chat.";
+        const membersLine = members ? `Group members: ${members}.` : undefined;
+        const activationLine =
+          activation === "always"
+            ? "Activation: always-on (you receive every group message)."
+            : "Activation: trigger-only (you are invoked only when explicitly mentioned; recent context may be included).";
+        const silenceLine =
+          activation === "always"
+            ? `If no response is needed, reply with exactly "${SILENT_REPLY_TOKEN}" (no other text) so Clawdis stays silent.`
             : undefined;
-          const activationLine =
-            activation === "always"
-              ? "Activation: always-on (you receive every group message)."
-              : "Activation: trigger-only (you are invoked only when explicitly mentioned; recent context may be included).";
-          const silenceLine =
-            activation === "always"
-              ? `If no response is needed, reply with exactly "${SILENT_REPLY_TOKEN}" (no other text) so Clawdis stays silent.`
-              : undefined;
-          const cautionLine =
-            activation === "always"
-              ? "Be extremely selective: reply only when you are directly addressed, asked a question, or can add clear value. Otherwise stay silent."
-              : undefined;
-          return [
-            subjectLine,
-            membersLine,
-            activationLine,
-            silenceLine,
-            cautionLine,
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .concat(
-              " Address the specific sender noted in the message context.",
-            );
-        })()
-      : "";
+        const cautionLine =
+          activation === "always"
+            ? "Be extremely selective: reply only when you are directly addressed, asked a question, or can add clear value. Otherwise stay silent."
+            : undefined;
+        return [
+          subjectLine,
+          membersLine,
+          activationLine,
+          silenceLine,
+          cautionLine,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .concat(" Address the specific sender noted in the message context.");
+      })()
+    : "";
   const baseBody = sessionCtx.BodyStripped ?? sessionCtx.Body ?? "";
   const rawBodyTrimmed = (ctx.Body ?? "").trim();
   const baseBodyTrimmedRaw = baseBody.trim();

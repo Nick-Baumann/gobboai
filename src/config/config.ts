@@ -535,12 +535,7 @@ const ClawdisSchema = z.object({
         .optional(),
       auth: z
         .object({
-          mode: z
-            .union([
-              z.literal("token"),
-              z.literal("password"),
-            ])
-            .optional(),
+          mode: z.union([z.literal("token"), z.literal("password")]).optional(),
           password: z.string().optional(),
           allowTailscale: z.boolean().optional(),
         })
