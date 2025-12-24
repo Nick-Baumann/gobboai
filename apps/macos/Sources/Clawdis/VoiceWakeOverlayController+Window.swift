@@ -3,7 +3,7 @@ import QuartzCore
 import SwiftUI
 
 extension VoiceWakeOverlayController {
-    private func present() {
+    func present() {
         if !self.enableUI || ProcessInfo.processInfo.isRunningTests {
             if !self.model.isVisible {
                 self.model.isVisible = true
