@@ -107,12 +107,53 @@ function normalizeToolParameters(tool: AnyAgentTool): AnyAgentTool {
   if (!schema) return tool;
   if ("type" in schema && "properties" in schema) return tool;
   if (!Array.isArray(schema.anyOf)) return tool;
+  const mergedProperties: Record<string, unknown> = {};
+  const requiredCounts = new Map<string, number>();
+  let objectVariants = 0;
+
+  for (const entry of schema.anyOf) {
+    if (!entry || typeof entry !== "object") continue;
+    const props = (entry as { properties?: unknown }).properties;
+    if (!props || typeof props !== "object") continue;
+    objectVariants += 1;
+    for (const [key, value] of Object.entries(
+      props as Record<string, unknown>,
+    )) {
+      if (!(key in mergedProperties)) mergedProperties[key] = value;
+    }
+    const required = Array.isArray((entry as { required?: unknown }).required)
+      ? (entry as { required: unknown[] }).required
+      : [];
+    for (const key of required) {
+      if (typeof key !== "string") continue;
+      requiredCounts.set(key, (requiredCounts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const baseRequired = Array.isArray(schema.required)
+    ? schema.required.filter((key) => typeof key === "string")
+    : undefined;
+  const mergedRequired =
+    baseRequired && baseRequired.length > 0
+      ? baseRequired
+      : objectVariants > 0
+        ? Array.from(requiredCounts.entries())
+            .filter(([, count]) => count === objectVariants)
+            .map(([key]) => key)
+        : undefined;
+
   return {
     ...tool,
     parameters: {
       ...schema,
       type: "object",
-      properties: schema.properties ?? {},
+      properties:
+        Object.keys(mergedProperties).length > 0
+          ? mergedProperties
+          : schema.properties ?? {},
+      ...(mergedRequired && mergedRequired.length > 0
+        ? { required: mergedRequired }
+        : {}),
       additionalProperties:
         "additionalProperties" in schema ? schema.additionalProperties : true,
     } as unknown as TSchema,
