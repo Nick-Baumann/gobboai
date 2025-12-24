@@ -680,3 +680,43 @@ final class NodeAppModel {
         }
     }
 }
+
+#if DEBUG
+extension NodeAppModel {
+    func _test_handleInvoke(_ req: BridgeInvokeRequest) async -> BridgeInvokeResponse {
+        await self.handleInvoke(req)
+    }
+
+    static func _test_decodeParams<T: Decodable>(_ type: T.Type, from json: String?) throws -> T {
+        try self.decodeParams(type, from: json)
+    }
+
+    static func _test_encodePayload(_ obj: some Encodable) throws -> String {
+        try self.encodePayload(obj)
+    }
+
+    func _test_isCameraEnabled() -> Bool {
+        self.isCameraEnabled()
+    }
+
+    func _test_triggerCameraFlash() {
+        self.triggerCameraFlash()
+    }
+
+    func _test_showCameraHUD(text: String, kind: CameraHUDKind, autoHideSeconds: Double? = nil) {
+        self.showCameraHUD(text: text, kind: kind, autoHideSeconds: autoHideSeconds)
+    }
+
+    func _test_handleCanvasA2UIAction(body: [String: Any]) async {
+        await self.handleCanvasA2UIAction(body: body)
+    }
+
+    func _test_resolveA2UIHostURL() async -> String? {
+        await self.resolveA2UIHostURL()
+    }
+
+    func _test_showLocalCanvasOnDisconnect() {
+        self.showLocalCanvasOnDisconnect()
+    }
+}
+#endif

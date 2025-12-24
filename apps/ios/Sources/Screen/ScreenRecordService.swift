@@ -198,3 +198,15 @@ final class ScreenRecordService {
         return min(30, max(1, v))
     }
 }
+
+#if DEBUG
+extension ScreenRecordService {
+    nonisolated static func _test_clampDurationMs(_ ms: Int?) -> Int {
+        self.clampDurationMs(ms)
+    }
+
+    nonisolated static func _test_clampFps(_ fps: Double?) -> Double {
+        self.clampFps(fps)
+    }
+}
+#endif

@@ -379,3 +379,11 @@ final class VoiceWakeManager: NSObject {
         }
     }
 }
+
+#if DEBUG
+extension VoiceWakeManager {
+    func _test_handleRecognitionCallback(transcript: String?, segments: [WakeWordSegment], errorText: String?) {
+        self.handleRecognitionCallback(transcript: transcript, segments: segments, errorText: errorText)
+    }
+}
+#endif
