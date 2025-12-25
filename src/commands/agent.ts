@@ -313,6 +313,7 @@ export async function agentCommand(
   try {
     result = await runEmbeddedPiAgent({
       sessionId,
+      sessionKey,
       sessionFile,
       workspaceDir,
       config: cfg,

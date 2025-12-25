@@ -131,6 +131,7 @@ Controls the embedded agent runtime (provider/model/thinking/verbose/timeouts).
     timeoutSeconds: 600,
     mediaMaxMb: 5,
     heartbeatMinutes: 30,
+    maxConcurrent: 3,
     bash: {
       backgroundMs: 20000,
       timeoutSec: 1800,
@@ -145,6 +146,10 @@ Controls the embedded agent runtime (provider/model/thinking/verbose/timeouts).
 - `backgroundMs`: time before auto-background (ms, default 20000)
 - `timeoutSec`: auto-kill after this runtime (seconds, default 1800)
 - `cleanupMs`: how long to keep finished sessions in memory (ms, default 1800000)
+
+`agent.maxConcurrent` sets the maximum number of embedded agent runs that can
+execute in parallel across sessions. Each session is still serialized (one run
+per session key at a time). Default: 1.
 
 ### `models` (custom providers + base URLs)
 

@@ -146,7 +146,6 @@ export async function runCronIsolatedAgentTurn(params: {
   lane?: string;
 }): Promise<RunCronAgentTurnResult> {
   const agentCfg = params.cfg.agent;
-  void params.lane;
   const workspaceDirRaw =
     params.cfg.agent?.workspace ?? DEFAULT_AGENT_WORKSPACE_DIR;
   const workspace = await ensureAgentWorkspace({
@@ -236,11 +235,13 @@ export async function runCronIsolatedAgentTurn(params: {
     );
     runResult = await runEmbeddedPiAgent({
       sessionId: cronSession.sessionEntry.sessionId,
+      sessionKey: params.sessionKey,
       sessionFile,
       workspaceDir,
       config: params.cfg,
       skillsSnapshot,
       prompt: commandBody,
+      lane: params.lane ?? "cron",
       provider,
       model,
       thinkLevel,
