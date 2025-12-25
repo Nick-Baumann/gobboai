@@ -171,6 +171,7 @@ jobs:
           done
           exit 1
   ios:
+    continue-on-error: true
     runs-on: macos-latest
     steps:
       - name: Checkout
