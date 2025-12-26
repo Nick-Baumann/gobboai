@@ -22,6 +22,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
     private var cacheUpdatedAt: Date?
     private let refreshIntervalSeconds: TimeInterval = 12
     private let nodesStore = InstancesStore.shared
+    private let gatewayDiscovery = GatewayDiscoveryModel()
     #if DEBUG
     private var testControlChannelConnected: Bool?
     #endif
@@ -41,6 +42,7 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         }
 
         self.nodesStore.start()
+        self.gatewayDiscovery.start()
     }
 
     func menuWillOpen(_ menu: NSMenu) {
@@ -458,6 +460,11 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
             menu.addItem(self.makeNodeDetailItem(label: "Reason", value: reason))
         }
 
+        if let sshURL = self.sshURL(for: entry) {
+            menu.addItem(.separator())
+            menu.addItem(self.makeNodeActionItem(title: "Open SSH", url: sshURL))
+        }
+
         return menu
     }
 
@@ -471,6 +478,13 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         let item = NSMenuItem(title: "\(label): \(value)", action: #selector(self.copyNodeValue(_:)), keyEquivalent: "")
         item.target = self
         item.representedObject = value
+        return item
+    }
+
+    private func makeNodeActionItem(title: String, url: URL) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(self.openNodeSSH(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = url
         return item
     }
 
@@ -588,6 +602,104 @@ final class MenuSessionsInjector: NSObject, NSMenuDelegate {
         guard let value = sender.representedObject as? String else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+
+    @objc
+    private func openNodeSSH(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+
+        if let appURL = self.preferredTerminalAppURL() {
+            NSWorkspace.shared.open(
+                [url],
+                withApplicationAt: appURL,
+                configuration: NSWorkspace.OpenConfiguration(),
+                completionHandler: nil)
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func preferredTerminalAppURL() -> URL? {
+        if let ghosty = self.ghostyAppURL() { return ghosty }
+        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
+    }
+
+    private func ghostyAppURL() -> URL? {
+        let candidates = [
+            "/Applications/Ghosty.app",
+            ("~/Applications/Ghosty.app" as NSString).expandingTildeInPath,
+        ]
+        for path in candidates where FileManager.default.fileExists(atPath: path) {
+            return URL(fileURLWithPath: path)
+        }
+        return nil
+    }
+
+    private func sshURL(for entry: InstanceInfo) -> URL? {
+        guard NodeMenuEntryFormatter.isGateway(entry) else { return nil }
+        guard let gateway = self.matchingGateway(for: entry) else { return nil }
+        guard let host = self.sanitizedTailnetHost(gateway.tailnetDns) ?? gateway.lanHost else { return nil }
+        let user = NSUserName()
+        return self.buildSSHURL(user: user, host: host, port: gateway.sshPort)
+    }
+
+    private func matchingGateway(for entry: InstanceInfo) -> GatewayDiscoveryModel.DiscoveredGateway? {
+        let candidates = self.entryHostCandidates(entry)
+        guard !candidates.isEmpty else { return nil }
+        return self.gatewayDiscovery.gateways.first { gateway in
+            let gatewayTokens = self.gatewayHostTokens(gateway)
+            return candidates.contains { gatewayTokens.contains($0) }
+        }
+    }
+
+    private func entryHostCandidates(_ entry: InstanceInfo) -> [String] {
+        let raw: [String?] = [
+            entry.host,
+            entry.ip,
+            NodeMenuEntryFormatter.primaryName(entry),
+        ]
+        return raw.compactMap(self.normalizedHostToken(_:))
+    }
+
+    private func gatewayHostTokens(_ gateway: GatewayDiscoveryModel.DiscoveredGateway) -> [String] {
+        let raw: [String?] = [
+            gateway.displayName,
+            gateway.lanHost,
+            gateway.tailnetDns,
+        ]
+        return raw.compactMap(self.normalizedHostToken(_:))
+    }
+
+    private func normalizedHostToken(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        let lower = trimmed.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        if lower.hasSuffix(".localdomain") {
+            return lower.replacingOccurrences(of: ".localdomain", with: ".local")
+        }
+        return lower
+    }
+
+    private func sanitizedTailnetHost(_ host: String?) -> String? {
+        guard let host else { return nil }
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        if trimmed.hasSuffix(".internal.") || trimmed.hasSuffix(".internal") {
+            return nil
+        }
+        return trimmed
+    }
+
+    private func buildSSHURL(user: String, host: String, port: Int) -> URL? {
+        var components = URLComponents()
+        components.scheme = "ssh"
+        components.user = user
+        components.host = host
+        if port != 22 {
+            components.port = port
+        }
+        return components.url
     }
 
     // MARK: - Width + placement

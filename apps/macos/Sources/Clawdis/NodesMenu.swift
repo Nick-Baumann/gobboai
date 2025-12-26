@@ -38,7 +38,10 @@ struct NodeMenuEntryFormatter {
     static func detailRight(_ entry: InstanceInfo) -> String? {
         var parts: [String] = []
         if let platform = self.platformText(entry) { parts.append(platform) }
-        if let version = entry.version?.nonEmpty { parts.append("v\(version)") }
+        if let version = entry.version?.nonEmpty {
+            let short = self.compactVersion(version)
+            parts.append("v\(short)")
+        }
         if parts.isEmpty { return nil }
         return parts.joined(separator: " · ")
     }
@@ -82,6 +85,18 @@ struct NodeMenuEntryFormatter {
         let prefix = parts.first?.lowercased() ?? ""
         let versionToken = parts.dropFirst().first
         return (prefix, versionToken)
+    }
+
+    private static func compactVersion(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        if let range = trimmed.range(
+            of: #"\s*\([^)]*\d[^)]*\)$"#,
+            options: .regularExpression
+        ) {
+            return String(trimmed[..<range.lowerBound])
+        }
+        return trimmed
     }
 
     static func leadingSymbol(_ entry: InstanceInfo) -> String {
