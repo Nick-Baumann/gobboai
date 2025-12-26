@@ -1,13 +1,13 @@
-export type ReplyHeartbeatWakeResult =
+export type HeartbeatRunResult =
   | { status: "ran"; durationMs: number }
   | { status: "skipped"; reason: string }
   | { status: "failed"; reason: string };
 
-export type ReplyHeartbeatWakeHandler = (opts: {
+export type HeartbeatWakeHandler = (opts: {
   reason?: string;
-}) => Promise<ReplyHeartbeatWakeResult>;
+}) => Promise<HeartbeatRunResult>;
 
-let handler: ReplyHeartbeatWakeHandler | null = null;
+let handler: HeartbeatWakeHandler | null = null;
 let pendingReason: string | null = null;
 let scheduled = false;
 let running = false;
@@ -51,27 +51,22 @@ function schedule(coalesceMs: number) {
   timer.unref?.();
 }
 
-export function setReplyHeartbeatWakeHandler(
-  next: ReplyHeartbeatWakeHandler | null,
-) {
+export function setHeartbeatWakeHandler(next: HeartbeatWakeHandler | null) {
   handler = next;
   if (handler && pendingReason) {
     schedule(DEFAULT_COALESCE_MS);
   }
 }
 
-export function requestReplyHeartbeatNow(opts?: {
-  reason?: string;
-  coalesceMs?: number;
-}) {
+export function requestHeartbeatNow(opts?: { reason?: string; coalesceMs?: number }) {
   pendingReason = opts?.reason ?? pendingReason ?? "requested";
   schedule(opts?.coalesceMs ?? DEFAULT_COALESCE_MS);
 }
 
-export function hasReplyHeartbeatWakeHandler() {
+export function hasHeartbeatWakeHandler() {
   return handler !== null;
 }
 
-export function hasPendingReplyHeartbeatWake() {
+export function hasPendingHeartbeatWake() {
   return pendingReason !== null || Boolean(timer) || scheduled;
 }

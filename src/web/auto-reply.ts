@@ -5,9 +5,12 @@ import {
   parseActivationCommand,
 } from "../auto-reply/group-activation.js";
 import { getReplyFromConfig } from "../auto-reply/reply.js";
+import {
+  HEARTBEAT_PROMPT,
+  stripHeartbeatToken,
+} from "../auto-reply/heartbeat.js";
 import { HEARTBEAT_TOKEN, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
-import { parseDurationMs } from "../cli/parse-duration.js";
 import { waitForever } from "../cli/wait.js";
 import { loadConfig } from "../config/config.js";
 import {
@@ -22,7 +25,6 @@ import { isVerbose, logVerbose } from "../globals.js";
 import { emitHeartbeatEvent } from "../infra/heartbeat-events.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { createSubsystemLogger, getChildLogger } from "../logging.js";
-import { getQueueSize } from "../process/command-queue.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { isSelfChatMode, jidToE164, normalizeE164 } from "../utils.js";
 import { setActiveWebListener } from "./active-listener.js";
@@ -37,8 +39,6 @@ import {
   resolveReconnectPolicy,
   sleepWithAbort,
 } from "./reconnect.js";
-import type { ReplyHeartbeatWakeResult } from "./reply-heartbeat-wake.js";
-import { setReplyHeartbeatWakeHandler } from "./reply-heartbeat-wake.js";
 import { formatError, getWebAuthAgeMs, readWebSelfId } from "./session.js";
 
 const WEB_TEXT_LIMIT = 4000;
@@ -47,11 +47,6 @@ const whatsappLog = createSubsystemLogger("gateway/providers/whatsapp");
 const whatsappInboundLog = whatsappLog.child("inbound");
 const whatsappOutboundLog = whatsappLog.child("outbound");
 const whatsappHeartbeatLog = whatsappLog.child("heartbeat");
-
-let heartbeatsEnabled = true;
-export function setHeartbeatsEnabled(enabled: boolean) {
-  heartbeatsEnabled = enabled;
-}
 
 // Send via the active gateway-backed listener. The monitor already owns the single
 // Baileys session, so use its send API directly.
@@ -73,8 +68,6 @@ type WebInboundMsg = Parameters<
 export type WebMonitorTuning = {
   reconnect?: Partial<ReconnectPolicy>;
   heartbeatSeconds?: number;
-  replyHeartbeatEvery?: string;
-  replyHeartbeatNow?: boolean;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   statusSink?: (status: WebProviderStatus) => void;
 };
@@ -82,8 +75,7 @@ export type WebMonitorTuning = {
 const formatDuration = (ms: number) =>
   ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${ms}ms`;
 
-export const HEARTBEAT_PROMPT = "HEARTBEAT";
-export { HEARTBEAT_TOKEN, SILENT_REPLY_TOKEN };
+export { HEARTBEAT_PROMPT, HEARTBEAT_TOKEN, SILENT_REPLY_TOKEN };
 
 export type WebProviderStatus = {
   running: boolean;
@@ -188,41 +180,7 @@ function debugMention(
   return { wasMentioned: result, details };
 }
 
-export function resolveReplyHeartbeatIntervalMs(
-  cfg: ReturnType<typeof loadConfig>,
-  overrideEvery?: string,
-) {
-  const raw = overrideEvery ?? cfg.agent?.heartbeat?.every;
-  if (!raw) return null;
-  const trimmed = String(raw).trim();
-  if (!trimmed) return null;
-  let ms: number;
-  try {
-    ms = parseDurationMs(trimmed, { defaultUnit: "m" });
-  } catch {
-    return null;
-  }
-  if (ms <= 0) return null;
-  return ms;
-}
-
-export function stripHeartbeatToken(raw?: string) {
-  if (!raw) return { shouldSkip: true, text: "" };
-  const trimmed = raw.trim();
-  if (!trimmed) return { shouldSkip: true, text: "" };
-  if (trimmed === HEARTBEAT_TOKEN) return { shouldSkip: true, text: "" };
-  const hadToken = trimmed.includes(HEARTBEAT_TOKEN);
-  let withoutToken = trimmed.replaceAll(HEARTBEAT_TOKEN, "").trim();
-  if (hadToken && withoutToken) {
-    // LLMs sometimes echo malformed HEARTBEAT_OK_OK... tails; strip trailing OK runs to avoid spam.
-    withoutToken = withoutToken.replace(/[\s_]*OK(?:[\s_]*OK)*$/gi, "").trim();
-  }
-  const shouldSkip = withoutToken.length === 0;
-  return {
-    shouldSkip,
-    text: shouldSkip ? "" : withoutToken || trimmed,
-  };
-}
+export { stripHeartbeatToken };
 
 function isSilentReply(payload?: ReplyPayload): boolean {
   if (!payload) return false;
@@ -425,27 +383,6 @@ export async function runWebHeartbeatOnce(opts: {
     emitHeartbeatEvent({ status: "failed", to, reason });
     throw err;
   }
-}
-
-function getFallbackRecipient(cfg: ReturnType<typeof loadConfig>) {
-  const sessionCfg = cfg.session;
-  const storePath = resolveStorePath(sessionCfg?.store);
-  const store = loadSessionStore(storePath);
-  const mainKey = (sessionCfg?.mainKey ?? "main").trim() || "main";
-  const main = store[mainKey];
-  const lastTo = typeof main?.lastTo === "string" ? main.lastTo.trim() : "";
-  const lastChannel = main?.lastChannel;
-
-  if (lastChannel === "whatsapp" && lastTo) {
-    return normalizeE164(lastTo);
-  }
-
-  const allowFrom =
-    Array.isArray(cfg.routing?.allowFrom) && cfg.routing.allowFrom.length > 0
-      ? cfg.routing.allowFrom.filter((v) => v !== "*")
-      : [];
-  if (allowFrom.length === 0) return null;
-  return allowFrom[0] ? normalizeE164(allowFrom[0]) : null;
 }
 
 function getSessionRecipients(cfg: ReturnType<typeof loadConfig>) {
@@ -775,10 +712,6 @@ export async function monitorWebProvider(
     cfg,
     tuning.heartbeatSeconds,
   );
-  const replyHeartbeatIntervalMs = resolveReplyHeartbeatIntervalMs(
-    cfg,
-    tuning.replyHeartbeatEvery,
-  );
   const reconnectPolicy = resolveReconnectPolicy(cfg, tuning.reconnect);
   const mentionConfig = buildMentionConfig(cfg);
   const sessionStorePath = resolveStorePath(cfg.session?.store);
@@ -940,7 +873,6 @@ export async function monitorWebProvider(
     const connectionId = newConnectionId();
     const startedAt = Date.now();
     let heartbeat: NodeJS.Timeout | null = null;
-    let replyHeartbeatTimer: NodeJS.Timeout | null = null;
     let watchdogTimer: NodeJS.Timeout | null = null;
     let lastMessageAt: number | null = null;
     let handledMessages = 0;
@@ -1346,9 +1278,7 @@ export async function monitorWebProvider(
 
     const closeListener = async () => {
       setActiveWebListener(null);
-      setReplyHeartbeatWakeHandler(null);
       if (heartbeat) clearInterval(heartbeat);
-      if (replyHeartbeatTimer) clearInterval(replyHeartbeatTimer);
       if (watchdogTimer) clearInterval(watchdogTimer);
       if (backgroundTasks.size > 0) {
         await Promise.allSettled(backgroundTasks);
@@ -1363,7 +1293,6 @@ export async function monitorWebProvider(
 
     if (keepAlive) {
       heartbeat = setInterval(() => {
-        if (!heartbeatsEnabled) return;
         const authAgeMs = getWebAuthAgeMs();
         const minutesSinceLastMessage = lastMessageAt
           ? Math.floor((Date.now() - lastMessageAt) / 60000)
@@ -1418,240 +1347,6 @@ export async function monitorWebProvider(
           }
         }
       }, WATCHDOG_CHECK_MS);
-    }
-
-    const runReplyHeartbeat = async (): Promise<ReplyHeartbeatWakeResult> => {
-      const started = Date.now();
-      if (!heartbeatsEnabled) {
-        return { status: "skipped", reason: "disabled" };
-      }
-      const queued = getQueueSize();
-      if (queued > 0) {
-        heartbeatLogger.info(
-          { connectionId, reason: "requests-in-flight", queued },
-          "reply heartbeat skipped",
-        );
-        if (isVerbose()) {
-          whatsappHeartbeatLog.debug("heartbeat skipped (requests in flight)");
-        }
-        return { status: "skipped", reason: "requests-in-flight" };
-      }
-      if (!replyHeartbeatIntervalMs) {
-        return { status: "skipped", reason: "disabled" };
-      }
-      let heartbeatInboundMsg = lastInboundMsg;
-      if (heartbeatInboundMsg?.chatType === "group") {
-        // Heartbeats should never target group chats. If the last inbound activity
-        // was in a group, fall back to the main/direct session recipient instead
-        // of skipping heartbeats entirely.
-        heartbeatLogger.info(
-          { connectionId, reason: "last-inbound-group" },
-          "reply heartbeat falling back",
-        );
-        heartbeatInboundMsg = null;
-      }
-      const tickStart = Date.now();
-      if (!heartbeatInboundMsg) {
-        const fallbackTo = getFallbackRecipient(cfg);
-        if (!fallbackTo) {
-          heartbeatLogger.info(
-            {
-              connectionId,
-              reason: "no-recent-inbound",
-              durationMs: Date.now() - tickStart,
-            },
-            "reply heartbeat skipped",
-          );
-          if (isVerbose()) {
-            whatsappHeartbeatLog.debug("heartbeat skipped (no recent inbound)");
-          }
-          return { status: "skipped", reason: "no-recent-inbound" };
-        }
-        const snapshot = getSessionSnapshot(cfg, fallbackTo, true);
-        if (!snapshot.entry) {
-          heartbeatLogger.info(
-            { connectionId, to: fallbackTo, reason: "no-session-for-fallback" },
-            "reply heartbeat skipped",
-          );
-          if (isVerbose()) {
-            whatsappHeartbeatLog.debug(
-              "heartbeat skipped (no session to resume)",
-            );
-          }
-          return { status: "skipped", reason: "no-session-for-fallback" };
-        }
-        if (isVerbose()) {
-          heartbeatLogger.info(
-            {
-              connectionId,
-              to: fallbackTo,
-              reason: "fallback-session",
-              sessionId: snapshot.entry?.sessionId ?? null,
-              sessionFresh: snapshot.fresh,
-            },
-            "reply heartbeat start",
-          );
-        }
-        await runWebHeartbeatOnce({
-          cfg,
-          to: fallbackTo,
-          verbose,
-          replyResolver,
-          sessionId: snapshot.entry.sessionId,
-        });
-        heartbeatLogger.info(
-          {
-            connectionId,
-            to: fallbackTo,
-            ...snapshot,
-            durationMs: Date.now() - tickStart,
-          },
-          "reply heartbeat sent (fallback session)",
-        );
-        return { status: "ran", durationMs: Date.now() - started };
-      }
-
-      try {
-        const snapshot = getSessionSnapshot(cfg, heartbeatInboundMsg.from);
-        if (isVerbose()) {
-          heartbeatLogger.info(
-            {
-              connectionId,
-              to: heartbeatInboundMsg.from,
-              intervalMs: replyHeartbeatIntervalMs,
-              sessionKey: snapshot.key,
-              sessionId: snapshot.entry?.sessionId ?? null,
-              sessionFresh: snapshot.fresh,
-            },
-            "reply heartbeat start",
-          );
-        }
-        const replyResult = await (replyResolver ?? getReplyFromConfig)(
-          {
-            Body: HEARTBEAT_PROMPT,
-            From: heartbeatInboundMsg.from,
-            To: heartbeatInboundMsg.to,
-            MessageSid: snapshot.entry?.sessionId,
-            MediaPath: undefined,
-            MediaUrl: undefined,
-            MediaType: undefined,
-          },
-          {
-            onReplyStart: heartbeatInboundMsg.sendComposing,
-            isHeartbeat: true,
-          },
-        );
-
-        const replyPayload = Array.isArray(replyResult)
-          ? replyResult[0]
-          : replyResult;
-
-        if (
-          !replyPayload ||
-          (!replyPayload.text &&
-            !replyPayload.mediaUrl &&
-            !replyPayload.mediaUrls?.length)
-        ) {
-          heartbeatLogger.info(
-            {
-              connectionId,
-              durationMs: Date.now() - tickStart,
-              reason: "empty-reply",
-            },
-            "reply heartbeat skipped",
-          );
-          if (isVerbose()) {
-            whatsappHeartbeatLog.debug("heartbeat ok (empty reply)");
-          }
-          return { status: "ran", durationMs: Date.now() - started };
-        }
-
-        const stripped = stripHeartbeatToken(replyPayload.text);
-        const hasMedia = Boolean(
-          replyPayload.mediaUrl || (replyPayload.mediaUrls?.length ?? 0) > 0,
-        );
-        if (stripped.shouldSkip && !hasMedia) {
-          heartbeatLogger.info(
-            {
-              connectionId,
-              durationMs: Date.now() - tickStart,
-              reason: "heartbeat-token",
-              rawLength: replyPayload.text?.length ?? 0,
-            },
-            "reply heartbeat skipped",
-          );
-          if (isVerbose()) {
-            whatsappHeartbeatLog.debug("heartbeat ok (HEARTBEAT_OK)");
-          }
-          return { status: "ran", durationMs: Date.now() - started };
-        }
-
-        // Apply response prefix if configured (same as regular messages)
-        let finalText = stripped.text;
-        const responsePrefix = cfg.messages?.responsePrefix;
-        if (
-          responsePrefix &&
-          finalText &&
-          !finalText.startsWith(responsePrefix)
-        ) {
-          finalText = `${responsePrefix} ${finalText}`;
-        }
-
-        const cleanedReply: ReplyPayload = {
-          ...replyPayload,
-          text: finalText,
-        };
-
-        await deliverWebReply({
-          replyResult: cleanedReply,
-          msg: heartbeatInboundMsg,
-          maxMediaBytes,
-          replyLogger,
-          connectionId,
-        });
-
-        const durationMs = Date.now() - tickStart;
-        whatsappHeartbeatLog.info(
-          `heartbeat alert sent (${formatDuration(durationMs)})`,
-        );
-        heartbeatLogger.info(
-          {
-            connectionId,
-            durationMs,
-            hasMedia,
-            chars: stripped.text?.length ?? 0,
-          },
-          "reply heartbeat sent",
-        );
-        return { status: "ran", durationMs: Date.now() - started };
-      } catch (err) {
-        const durationMs = Date.now() - tickStart;
-        heartbeatLogger.warn(
-          {
-            connectionId,
-            error: formatError(err),
-            durationMs,
-          },
-          "reply heartbeat failed",
-        );
-        whatsappHeartbeatLog.warn(
-          `heartbeat failed (${formatDuration(durationMs)})`,
-        );
-        return { status: "failed", reason: formatError(err) };
-      }
-    };
-
-    setReplyHeartbeatWakeHandler(async () => runReplyHeartbeat());
-
-    if (replyHeartbeatIntervalMs && !replyHeartbeatTimer) {
-      const intervalMs = replyHeartbeatIntervalMs;
-      replyHeartbeatTimer = setInterval(() => {
-        if (!heartbeatsEnabled) return;
-        void runReplyHeartbeat();
-      }, intervalMs);
-      if (tuning.replyHeartbeatNow) {
-        void runReplyHeartbeat();
-      }
     }
 
     whatsappLog.info(

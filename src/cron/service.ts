@@ -34,7 +34,7 @@ export type CronServiceDeps = {
   storePath: string;
   cronEnabled: boolean;
   enqueueSystemEvent: (text: string) => void;
-  requestReplyHeartbeatNow: (opts?: { reason?: string }) => void;
+  requestHeartbeatNow: (opts?: { reason?: string }) => void;
   runIsolatedAgentJob: (params: { job: CronJob; message: string }) => Promise<{
     status: "ok" | "error" | "skipped";
     summary?: string;
@@ -276,7 +276,7 @@ export class CronService {
     if (!text) return { ok: false };
     this.deps.enqueueSystemEvent(text);
     if (opts.mode === "now") {
-      this.deps.requestReplyHeartbeatNow({ reason: "wake" });
+      this.deps.requestHeartbeatNow({ reason: "wake" });
     }
     return { ok: true };
   }
@@ -479,7 +479,7 @@ export class CronService {
         const statusPrefix = status === "ok" ? prefix : `${prefix} (${status})`;
         this.deps.enqueueSystemEvent(`${statusPrefix}: ${body}`);
         if (job.wakeMode === "now") {
-          this.deps.requestReplyHeartbeatNow({ reason: `cron:${job.id}:post` });
+          this.deps.requestHeartbeatNow({ reason: `cron:${job.id}:post` });
         }
       }
     };
@@ -503,7 +503,7 @@ export class CronService {
         }
         this.deps.enqueueSystemEvent(text);
         if (job.wakeMode === "now") {
-          this.deps.requestReplyHeartbeatNow({ reason: `cron:${job.id}` });
+          this.deps.requestHeartbeatNow({ reason: `cron:${job.id}` });
         }
         await finish("ok", undefined, text);
         return;

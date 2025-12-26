@@ -39,7 +39,7 @@ export function resolveConfiguredModelRef(params: {
       if (parsed) return parsed;
     }
     // TODO(steipete): drop this fallback once provider-less agent.model is fully deprecated.
-    return { provider: params.defaultProvider, model: trimmed };
+    return { provider: "anthropic", model: trimmed };
   }
   return { provider: params.defaultProvider, model: params.defaultModel };
 }
