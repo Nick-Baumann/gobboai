@@ -33,8 +33,16 @@ export async function loadModelCatalog(params?: {
       await ensureClawdisModelsJson(cfg);
       const agentDir = resolveClawdisAgentDir();
       const authStorage = piSdk.discoverAuthStorage(agentDir);
-      const registry = piSdk.discoverModels(authStorage, agentDir);
-      const entries = registry.getAll();
+      const registry = piSdk.discoverModels(authStorage, agentDir) as
+        | {
+            getAll: () => Array<{
+              id: string;
+              name?: string;
+              provider: string;
+            }>;
+          }
+        | Array<{ id: string; name?: string; provider: string }>;
+      const entries = Array.isArray(registry) ? registry : registry.getAll();
       for (const entry of entries) {
         const id = String(entry?.id ?? "").trim();
         if (!id) continue;
