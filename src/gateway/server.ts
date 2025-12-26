@@ -76,6 +76,11 @@ import {
   getLastHeartbeatEvent,
   onHeartbeatEvent,
 } from "../infra/heartbeat-events.js";
+import {
+  setHeartbeatsEnabled,
+  startHeartbeatRunner,
+} from "../infra/heartbeat-runner.js";
+import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
 import { getMachineDisplayName } from "../infra/machine-name.js";
 import {
   approveNodePairing,
@@ -129,13 +134,9 @@ import { monitorTelegramProvider } from "../telegram/monitor.js";
 import { probeTelegram, type TelegramProbe } from "../telegram/probe.js";
 import { sendMessageTelegram } from "../telegram/send.js";
 import { normalizeE164, resolveUserPath } from "../utils.js";
-import {
-  setHeartbeatsEnabled,
-  type WebProviderStatus,
-} from "../web/auto-reply.js";
+import type { WebProviderStatus } from "../web/auto-reply.js";
 import { startWebLoginWithQr, waitForWebLogin } from "../web/login-qr.js";
 import { sendMessageWhatsApp } from "../web/outbound.js";
-import { requestReplyHeartbeatNow } from "../web/reply-heartbeat-wake.js";
 import { getWebAuthAgeMs, logoutWeb, readWebSelfId } from "../web/session.js";
 import {
   assertGatewayAuthConfigured,
@@ -1423,7 +1424,7 @@ export async function startGatewayServer(
   }) => {
     enqueueSystemEvent(value.text);
     if (value.mode === "now") {
-      requestReplyHeartbeatNow({ reason: "hook:wake" });
+      requestHeartbeatNow({ reason: "hook:wake" });
     }
   };
 
@@ -1481,13 +1482,13 @@ export async function startGatewayServer(
             : `Hook ${value.name} (${result.status})`;
         enqueueSystemEvent(`${prefix}: ${summary}`.trim());
         if (value.wakeMode === "now") {
-          requestReplyHeartbeatNow({ reason: `hook:${jobId}` });
+          requestHeartbeatNow({ reason: `hook:${jobId}` });
         }
       } catch (err) {
         logHooks.warn(`hook agent failed: ${String(err)}`);
         enqueueSystemEvent(`Hook ${value.name} (error): ${String(err)}`);
         if (value.wakeMode === "now") {
-          requestReplyHeartbeatNow({ reason: `hook:${jobId}:error` });
+          requestHeartbeatNow({ reason: `hook:${jobId}:error` });
         }
       }
     })();
@@ -1758,7 +1759,7 @@ export async function startGatewayServer(
     storePath: cronStorePath,
     cronEnabled,
     enqueueSystemEvent,
-    requestReplyHeartbeatNow,
+    requestHeartbeatNow,
     runIsolatedAgentJob: async ({ job, message }) => {
       const cfg = loadConfig();
       return await runCronIsolatedAgentTurn({
@@ -3359,6 +3360,8 @@ export async function startGatewayServer(
   const heartbeatUnsub = onHeartbeatEvent((evt) => {
     broadcast("heartbeat", evt, { dropIfSlow: true });
   });
+
+  const heartbeatRunner = startHeartbeatRunner({ cfg: cfgAtStart });
 
   void cron
     .start()
@@ -5970,6 +5973,7 @@ export async function startGatewayServer(
       await stopWhatsAppProvider();
       await stopTelegramProvider();
       cron.stop();
+      heartbeatRunner.stop();
       broadcast("shutdown", {
         reason,
         restartExpectedMs,

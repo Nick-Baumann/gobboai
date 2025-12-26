@@ -329,6 +329,12 @@ export type ClawdisConfig = {
       every?: string;
       /** Heartbeat model override (provider/model). */
       model?: string;
+      /** Delivery target (last|whatsapp|telegram|none). */
+      target?: "last" | "whatsapp" | "telegram" | "none";
+      /** Optional delivery override (E.164 for WhatsApp, chat id for Telegram). */
+      to?: string;
+      /** Override the heartbeat prompt body (default: "HEARTBEAT"). */
+      prompt?: string;
     };
     /** Max concurrent agent runs across all conversations. Default: 1 (sequential). */
     maxConcurrent?: number;
@@ -454,6 +460,16 @@ const HeartbeatSchema = z
   .object({
     every: z.string().optional(),
     model: z.string().optional(),
+    target: z
+      .union([
+        z.literal("last"),
+        z.literal("whatsapp"),
+        z.literal("telegram"),
+        z.literal("none"),
+      ])
+      .optional(),
+    to: z.string().optional(),
+    prompt: z.string().optional(),
   })
   .superRefine((val, ctx) => {
     if (!val.every) return;
