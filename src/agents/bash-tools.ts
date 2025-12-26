@@ -133,12 +133,13 @@ export function createBashTool(
       const workdir = params.workdir?.trim() || process.cwd();
 
       const { shell, args: shellArgs } = getShellConfig();
+      const env = params.env ? { ...process.env, ...params.env } : process.env;
       const child: ChildProcessWithoutNullStreams = spawn(
         shell,
         [...shellArgs, params.command],
         {
           cwd: workdir,
-          env: { ...process.env, ...(params.env ?? {}) },
+          env,
           detached: true,
           stdio: ["pipe", "pipe", "pipe"],
         },
