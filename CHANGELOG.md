@@ -2,6 +2,9 @@
 
 ## 2.0.0-beta5 — Unreleased
 
+### Features
+- Talk mode: continuous speech conversations (macOS/iOS/Android) with ElevenLabs TTS, reply directives, and optional interrupt-on-speech.
+
 ### Fixes
 - macOS: Voice Wake now fully tears down the Speech pipeline when disabled (cancel pending restarts, drop stale callbacks) to avoid high CPU in the background.
 - iOS/Android nodes: enable scrolling for loaded web pages in the Canvas WebView (default scaffold stays touch-first).
@@ -10,7 +13,7 @@
 - iOS node: fix ReplayKit screen recording crash caused by queue isolation assertions during capture.
 - iOS/Android nodes: bridge auto-connect refreshes stale tokens and settings now show richer bridge/device details.
 - iOS/Android nodes: status pill now surfaces camera activity instead of overlay toasts.
-- iOS/Android nodes: camera snaps recompress to keep base64 payloads under 5 MB.
+- iOS/Android/macOS nodes: camera snaps recompress to keep base64 payloads under 5 MB.
 - CLI: avoid spurious gateway close errors after successful request/response cycles.
 - Agent runtime: clamp tool-result images to the 5MB Anthropic limit to avoid hard request rejections.
 - Tests: add Swift Testing coverage for camera errors and Kotest coverage for Android bridge endpoints.

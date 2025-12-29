@@ -85,7 +85,7 @@ actor CameraController {
         withExtendedLifetime(delegate) {}
 
         let maxPayloadBytes = 5 * 1024 * 1024
-        // Base64 inflates payloads by ~4/3, so cap encoded bytes to keep payload <= 5MB.
+        // Base64 inflates payloads by ~4/3; cap encoded bytes so the payload stays under 5MB (API limit).
         let maxEncodedBytes = (maxPayloadBytes / 4) * 3
         let res = try JPEGTranscoder.transcodeToJPEG(
             imageData: rawData,

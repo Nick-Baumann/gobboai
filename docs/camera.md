@@ -121,6 +121,7 @@ clawdis nodes camera clip --node <id> --no-audio
 
 Notes:
 - `clawdis nodes camera snap` defaults to `maxWidth=1600` unless overridden.
+- Photo payloads are recompressed to keep base64 under 5 MB.
 
 ## Safety + practical limits
 

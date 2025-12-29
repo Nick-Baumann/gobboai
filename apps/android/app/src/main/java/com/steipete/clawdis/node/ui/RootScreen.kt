@@ -67,6 +67,7 @@ fun RootScreen(viewModel: MainViewModel) {
   val cameraFlashToken by viewModel.cameraFlashToken.collectAsState()
   val activity =
     remember(cameraHud) {
+      // Status pill owns transient capture state so it doesn't overlap the connection indicator.
       cameraHud?.let { hud ->
         when (hud.kind) {
           CameraHudKind.Photo ->
