@@ -101,6 +101,7 @@ class CameraCaptureManager(private val context: Context) {
         }
 
       val maxPayloadBytes = 5 * 1024 * 1024
+      // Base64 inflates payloads by ~4/3; cap encoded bytes so the payload stays under 5MB (API limit).
       val maxEncodedBytes = (maxPayloadBytes / 4) * 3
       val result =
         JpegSizeLimiter.compressToLimit(

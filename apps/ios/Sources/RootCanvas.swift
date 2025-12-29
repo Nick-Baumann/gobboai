@@ -173,6 +173,7 @@ private struct CanvasContent: View {
     }
 
     private var statusActivity: StatusPill.Activity? {
+        // Status pill owns transient capture state so it doesn't overlap the connection indicator.
         guard let cameraHUDText, !cameraHUDText.isEmpty, let cameraHUDKind else { return nil }
         let systemImage: String
         let tint: Color?
