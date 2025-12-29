@@ -219,6 +219,17 @@ export type CanvasHostConfig = {
   port?: number;
 };
 
+export type TalkConfig = {
+  /** Default ElevenLabs voice ID for Talk mode. */
+  voiceId?: string;
+  /** Default ElevenLabs model ID for Talk mode. */
+  modelId?: string;
+  /** Default ElevenLabs output format (e.g. mp3_44100_128). */
+  outputFormat?: string;
+  /** Stop speaking when user starts talking (default: true). */
+  interruptOnSpeech?: boolean;
+};
+
 export type GatewayControlUiConfig = {
   /** If false, the Gateway will not serve the Control UI (/). Default: true. */
   enabled?: boolean;
@@ -391,6 +402,7 @@ export type ClawdisConfig = {
   bridge?: BridgeConfig;
   discovery?: DiscoveryConfig;
   canvasHost?: CanvasHostConfig;
+  talk?: TalkConfig;
   gateway?: GatewayConfig;
   skills?: Record<string, SkillConfig>;
 };
@@ -783,6 +795,14 @@ const ClawdisSchema = z.object({
       enabled: z.boolean().optional(),
       root: z.string().optional(),
       port: z.number().int().positive().optional(),
+    })
+    .optional(),
+  talk: z
+    .object({
+      voiceId: z.string().optional(),
+      modelId: z.string().optional(),
+      outputFormat: z.string().optional(),
+      interruptOnSpeech: z.boolean().optional(),
     })
     .optional(),
   gateway: z

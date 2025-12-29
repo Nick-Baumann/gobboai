@@ -28,6 +28,7 @@ final class NodeAppModel {
     private var voiceWakeSyncTask: Task<Void, Never>?
     @ObservationIgnored private var cameraHUDDismissTask: Task<Void, Never>?
     let voiceWake = VoiceWakeManager()
+    let talkMode = TalkModeManager()
     private var lastAutoA2uiURL: String?
 
     var bridgeSession: BridgeSession { self.bridge }
@@ -49,6 +50,9 @@ final class NodeAppModel {
 
         let enabled = UserDefaults.standard.bool(forKey: "voiceWake.enabled")
         self.voiceWake.setEnabled(enabled)
+        self.talkMode.attachBridge(self.bridge)
+        let talkEnabled = UserDefaults.standard.bool(forKey: "talk.enabled")
+        self.talkMode.setEnabled(talkEnabled)
 
         // Wire up deep links from canvas taps
         self.screen.onDeepLink = { [weak self] url in
@@ -175,6 +179,10 @@ final class NodeAppModel {
 
     func setVoiceWakeEnabled(_ enabled: Bool) {
         self.voiceWake.setEnabled(enabled)
+    }
+
+    func setTalkEnabled(_ enabled: Bool) {
+        self.talkMode.setEnabled(enabled)
     }
 
     func connectToBridge(

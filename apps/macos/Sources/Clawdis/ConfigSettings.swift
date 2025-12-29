@@ -30,6 +30,10 @@ struct ConfigSettings: View {
     @State private var browserColorHex: String = "#FF4500"
     @State private var browserAttachOnly: Bool = false
 
+    // Talk mode settings (stored in ~/.clawdis/clawdis.json under "talk")
+    @State private var talkVoiceId: String = ""
+    @State private var talkInterruptOnSpeech: Bool = true
+
     var body: some View {
         ScrollView { self.content }
             .onChange(of: self.modelCatalogPath) { _, _ in
@@ -53,6 +57,7 @@ struct ConfigSettings: View {
             self.header
             self.agentSection
             self.heartbeatSection
+            self.talkSection
             self.browserSection
             Spacer(minLength: 0)
         }
@@ -266,6 +271,37 @@ struct ConfigSettings: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private var talkSection: some View {
+        GroupBox("Talk Mode") {
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 10) {
+                GridRow {
+                    self.gridLabel("Voice ID")
+                    VStack(alignment: .leading, spacing: 6) {
+                        ComboBox("ElevenLabs voice ID", text: self.$talkVoiceId) {
+                            ForEach(self.talkVoiceSuggestions, id: \.self) { value in
+                                Text(value).tag(value)
+                            }
+                        }
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                        .onChange(of: self.talkVoiceId) { _, _ in self.autosaveConfig() }
+                        Text("Defaults to ELEVENLABS_VOICE_ID / SAG_VOICE_ID if unset.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                GridRow {
+                    self.gridLabel("Interrupt")
+                    Toggle("Stop speaking when you start talking", isOn: self.$talkInterruptOnSpeech)
+                        .labelsHidden()
+                        .toggleStyle(.checkbox)
+                        .onChange(of: self.talkInterruptOnSpeech) { _, _ in self.autosaveConfig() }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func gridLabel(_ text: String) -> some View {
         Text(text)
             .foregroundStyle(.secondary)
@@ -278,6 +314,7 @@ struct ConfigSettings: View {
         let heartbeatMinutes = agent?["heartbeatMinutes"] as? Int
         let heartbeatBody = agent?["heartbeatBody"] as? String
         let browser = parsed["browser"] as? [String: Any]
+        let talk = parsed["talk"] as? [String: Any]
 
         let loadedModel = (agent?["model"] as? String) ?? ""
         if !loadedModel.isEmpty {
@@ -297,6 +334,13 @@ struct ConfigSettings: View {
             if let color = browser["color"] as? String, !color.isEmpty { self.browserColorHex = color }
             if let attachOnly = browser["attachOnly"] as? Bool { self.browserAttachOnly = attachOnly }
         }
+
+        if let talk {
+            if let voice = talk["voiceId"] as? String { self.talkVoiceId = voice }
+            if let interrupt = talk["interruptOnSpeech"] as? Bool {
+                self.talkInterruptOnSpeech = interrupt
+            }
+        }
     }
 
     private func autosaveConfig() {
@@ -312,6 +356,7 @@ struct ConfigSettings: View {
         var root = self.loadConfigDict()
         var agent = root["agent"] as? [String: Any] ?? [:]
         var browser = root["browser"] as? [String: Any] ?? [:]
+        var talk = root["talk"] as? [String: Any] ?? [:]
 
         let chosenModel = (self.configModel == "__custom__" ? self.customModel : self.configModel)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -337,6 +382,15 @@ struct ConfigSettings: View {
         browser["attachOnly"] = self.browserAttachOnly
         root["browser"] = browser
 
+        let trimmedVoice = self.talkVoiceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedVoice.isEmpty {
+            talk.removeValue(forKey: "voiceId")
+        } else {
+            talk["voiceId"] = trimmedVoice
+        }
+        talk["interruptOnSpeech"] = self.talkInterruptOnSpeech
+        root["talk"] = talk
+
         ClawdisConfigFile.saveDict(root)
     }
 
@@ -352,6 +406,20 @@ struct ConfigSettings: View {
         let g = Double((value >> 8) & 0xFF) / 255.0
         let b = Double(value & 0xFF) / 255.0
         return Color(red: r, green: g, blue: b)
+    }
+
+    private var talkVoiceSuggestions: [String] {
+        let env = ProcessInfo.processInfo.environment
+        let candidates = [
+            self.talkVoiceId,
+            env["ELEVENLABS_VOICE_ID"] ?? "",
+            env["SAG_VOICE_ID"] ?? "",
+        ]
+        var seen = Set<String>()
+        return candidates
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .filter { seen.insert($0).inserted }
     }
 
     private var browserPathLabel: String? {

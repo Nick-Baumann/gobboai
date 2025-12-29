@@ -121,6 +121,15 @@ final class AppState {
             forKey: voicePushToTalkEnabledKey) } }
     }
 
+    var talkEnabled: Bool {
+        didSet {
+            self.ifNotPreview {
+                UserDefaults.standard.set(self.talkEnabled, forKey: talkEnabledKey)
+                Task { await TalkModeController.shared.setEnabled(self.talkEnabled) }
+            }
+        }
+    }
+
     var iconOverride: IconOverrideSelection {
         didSet { self.ifNotPreview { UserDefaults.standard.set(self.iconOverride.rawValue, forKey: iconOverrideKey) } }
     }
@@ -216,6 +225,7 @@ final class AppState {
             .stringArray(forKey: voiceWakeAdditionalLocalesKey) ?? []
         self.voicePushToTalkEnabled = UserDefaults.standard
             .object(forKey: voicePushToTalkEnabledKey) as? Bool ?? false
+        self.talkEnabled = UserDefaults.standard.bool(forKey: talkEnabledKey)
         if let storedHeartbeats = UserDefaults.standard.object(forKey: heartbeatsEnabledKey) as? Bool {
             self.heartbeatsEnabled = storedHeartbeats
         } else {
@@ -256,9 +266,13 @@ final class AppState {
         if self.swabbleEnabled, !PermissionManager.voiceWakePermissionsGranted() {
             self.swabbleEnabled = false
         }
+        if self.talkEnabled, !PermissionManager.voiceWakePermissionsGranted() {
+            self.talkEnabled = false
+        }
 
         if !self.isPreview {
             Task { await VoiceWakeRuntime.shared.refresh(state: self) }
+            Task { await TalkModeController.shared.setEnabled(self.talkEnabled) }
         }
     }
 
@@ -310,6 +324,23 @@ final class AppState {
         let granted = await PermissionManager.ensureVoiceWakePermissions(interactive: true)
         self.swabbleEnabled = granted
         Task { await VoiceWakeRuntime.shared.refresh(state: self) }
+    }
+
+    func setTalkEnabled(_ enabled: Bool) async {
+        guard voiceWakeSupported else {
+            self.talkEnabled = false
+            return
+        }
+
+        self.talkEnabled = enabled
+        guard !self.isPreview else { return }
+
+        if !enabled { return }
+
+        if PermissionManager.voiceWakePermissionsGranted() { return }
+
+        let granted = await PermissionManager.ensureVoiceWakePermissions(interactive: true)
+        self.talkEnabled = granted
     }
 
     // MARK: - Global wake words sync (Gateway-owned)
@@ -367,6 +398,7 @@ extension AppState {
         state.voiceWakeLocaleID = Locale.current.identifier
         state.voiceWakeAdditionalLocaleIDs = ["en-US", "de-DE"]
         state.voicePushToTalkEnabled = false
+        state.talkEnabled = false
         state.iconOverride = .system
         state.heartbeatsEnabled = true
         state.connectionMode = .local

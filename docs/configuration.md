@@ -195,6 +195,21 @@ Controls inbound/outbound prefixes and timestamps.
 }
 ```
 
+### `talk`
+
+Defaults for Talk mode (macOS/iOS/Android). Voice IDs fall back to `ELEVENLABS_VOICE_ID` or `SAG_VOICE_ID` when unset.
+
+```json5
+{
+  talk: {
+    voiceId: "elevenlabs_voice_id",
+    modelId: "eleven_v3",
+    outputFormat: "mp3_44100_128",
+    interruptOnSpeech: true
+  }
+}
+```
+
 ### `agent`
 
 Controls the embedded agent runtime (model/thinking/verbose/timeouts).
