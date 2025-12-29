@@ -25,6 +25,7 @@ import com.steipete.clawdis.node.protocol.ClawdisCanvasA2UIAction
 import com.steipete.clawdis.node.protocol.ClawdisCanvasA2UICommand
 import com.steipete.clawdis.node.protocol.ClawdisCanvasCommand
 import com.steipete.clawdis.node.protocol.ClawdisScreenCommand
+import com.steipete.clawdis.node.voice.TalkModeManager
 import com.steipete.clawdis.node.voice.VoiceWakeManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -84,6 +85,15 @@ class NodeRuntime(context: Context) {
   val voiceWakeStatusText: StateFlow<String>
     get() = voiceWake.statusText
 
+  val talkStatusText: StateFlow<String>
+    get() = talkMode.statusText
+
+  val talkIsListening: StateFlow<Boolean>
+    get() = talkMode.isListening
+
+  val talkIsSpeaking: StateFlow<Boolean>
+    get() = talkMode.isSpeaking
+
   private val discovery = BridgeDiscovery(appContext, scope = scope)
   val bridges: StateFlow<List<BridgeEndpoint>> = discovery.bridges
   val discoveryStatusText: StateFlow<String> = discovery.statusText
@@ -133,6 +143,9 @@ class NodeRuntime(context: Context) {
     )
 
   private val chat = ChatController(scope = scope, session = session, json = json)
+  private val talkMode: TalkModeManager by lazy {
+    TalkModeManager(context = appContext, scope = scope).also { it.attachSession(session) }
+  }
 
   private fun handleSessionDisconnected(message: String) {
     _statusText.value = message
@@ -163,6 +176,7 @@ class NodeRuntime(context: Context) {
   val preventSleep: StateFlow<Boolean> = prefs.preventSleep
   val wakeWords: StateFlow<List<String>> = prefs.wakeWords
   val voiceWakeMode: StateFlow<VoiceWakeMode> = prefs.voiceWakeMode
+  val talkEnabled: StateFlow<Boolean> = prefs.talkEnabled
   val manualEnabled: StateFlow<Boolean> = prefs.manualEnabled
   val manualHost: StateFlow<String> = prefs.manualHost
   val manualPort: StateFlow<Int> = prefs.manualPort
@@ -216,6 +230,13 @@ class NodeRuntime(context: Context) {
 
           voiceWake.start()
         }
+    }
+
+    scope.launch {
+      talkEnabled.collect { enabled ->
+        talkMode.setEnabled(enabled)
+        externalAudioCaptureActive.value = enabled
+      }
     }
 
     scope.launch(Dispatchers.Default) {
@@ -309,6 +330,10 @@ class NodeRuntime(context: Context) {
 
   fun setVoiceWakeMode(mode: VoiceWakeMode) {
     prefs.setVoiceWakeMode(mode)
+  }
+
+  fun setTalkEnabled(value: Boolean) {
+    prefs.setTalkEnabled(value)
   }
 
   fun connect(endpoint: BridgeEndpoint) {
@@ -548,6 +573,7 @@ class NodeRuntime(context: Context) {
       return
     }
 
+    talkMode.handleBridgeEvent(event, payloadJson)
     chat.handleBridgeEvent(event, payloadJson)
   }
 
