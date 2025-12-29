@@ -163,6 +163,10 @@ private fun CanvasView(viewModel: MainViewModel, modifier: Modifier = Modifier) 
         // Some embedded web UIs (incl. the "background website") use localStorage/sessionStorage.
         settings.domStorageEnabled = true
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+        isScrollContainer = true
+        overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        isVerticalScrollBarEnabled = true
+        isHorizontalScrollBarEnabled = true
         webViewClient =
           object : WebViewClient() {
             override fun onReceivedError(
