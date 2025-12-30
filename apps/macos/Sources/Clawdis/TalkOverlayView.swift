@@ -97,6 +97,7 @@ private final class OrbInteractionNSView: NSView {
     private var suppressSingleClick = false
 
     override var acceptsFirstResponder: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         self.mouseDownEvent = event
