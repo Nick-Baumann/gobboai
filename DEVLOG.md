@@ -206,3 +206,4 @@ A running notebook of changes, observations, and small experiments.
 - 2025-12-18: fixed a flaky test
 - 2025-12-24: candidate passed at 56%
 - 2025-12-24: added more telemetry
+- 2025-12-30: dropped a buggy feature flag
