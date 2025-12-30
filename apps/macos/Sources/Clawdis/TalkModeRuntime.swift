@@ -507,19 +507,23 @@ actor TalkModeRuntime {
                 }
 
                 let modelId = directive?.modelId ?? self.currentModelId ?? self.defaultModelId
-                let request = ElevenLabsTTSRequest(
-                    text: cleaned,
-                    modelId: modelId,
-                    outputFormat: outputFormat,
-                    speed: TalkTTSValidation.resolveSpeed(speed: directive?.speed, rateWPM: directive?.rateWPM),
-                    stability: TalkTTSValidation.validatedStability(directive?.stability, modelId: modelId),
-                    similarity: TalkTTSValidation.validatedUnit(directive?.similarity),
-                    style: TalkTTSValidation.validatedUnit(directive?.style),
-                    speakerBoost: directive?.speakerBoost,
-                    seed: TalkTTSValidation.validatedSeed(directive?.seed),
-                    normalize: ElevenLabsTTSClient.validatedNormalize(directive?.normalize),
-                    language: language,
-                    latencyTier: TalkTTSValidation.validatedLatencyTier(directive?.latencyTier))
+                func makeRequest(outputFormat: String?) -> ElevenLabsTTSRequest {
+                    ElevenLabsTTSRequest(
+                        text: cleaned,
+                        modelId: modelId,
+                        outputFormat: outputFormat,
+                        speed: TalkTTSValidation.resolveSpeed(speed: directive?.speed, rateWPM: directive?.rateWPM),
+                        stability: TalkTTSValidation.validatedStability(directive?.stability, modelId: modelId),
+                        similarity: TalkTTSValidation.validatedUnit(directive?.similarity),
+                        style: TalkTTSValidation.validatedUnit(directive?.style),
+                        speakerBoost: directive?.speakerBoost,
+                        seed: TalkTTSValidation.validatedSeed(directive?.seed),
+                        normalize: ElevenLabsTTSClient.validatedNormalize(directive?.normalize),
+                        language: language,
+                        latencyTier: TalkTTSValidation.validatedLatencyTier(directive?.latencyTier))
+                }
+
+                let request = makeRequest(outputFormat: outputFormat)
 
                 self.ttsLogger.info("talk TTS synth timeout=\(synthTimeoutSeconds, privacy: .public)s")
                 let client = ElevenLabsTTSClient(apiKey: apiKey)
@@ -539,6 +543,15 @@ actor TalkModeRuntime {
                 if let sampleRate {
                     self.lastPlaybackWasPCM = true
                     result = await self.playPCM(stream: stream, sampleRate: sampleRate)
+                    if !result.finished, result.interruptedAt == nil {
+                        let mp3Format = ElevenLabsTTSClient.validatedOutputFormat("mp3_44100")
+                        self.ttsLogger.warning("talk pcm playback failed; retrying mp3")
+                        self.lastPlaybackWasPCM = false
+                        let mp3Stream = client.streamSynthesize(
+                            voiceId: voiceId,
+                            request: makeRequest(outputFormat: mp3Format))
+                        result = await self.playMP3(stream: mp3Stream)
+                    }
                 } else {
                     self.lastPlaybackWasPCM = false
                     result = await self.playMP3(stream: stream)

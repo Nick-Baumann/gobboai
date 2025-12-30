@@ -112,6 +112,7 @@ final class TalkOverlayController {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.hidesOnDeactivate = false
         panel.isMovable = false
+        panel.acceptsMouseMovedEvents = true
         panel.isFloatingPanel = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.titleVisibility = .hidden
@@ -136,6 +137,10 @@ final class TalkOverlayController {
 }
 
 private final class TalkOverlayHostingView: NSHostingView<TalkOverlayView> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let center = CGPoint(
             x: self.bounds.maxX - TalkOverlayController.orbPadding - (TalkOverlayController.orbSize / 2),
