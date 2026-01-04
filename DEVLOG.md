@@ -214,3 +214,4 @@ A running notebook of changes, observations, and small experiments.
 - 2026-01-03: candidate passed at 58%
 - 2026-01-04: tightened the coach prompt
 - 2026-01-04: added a quick benchmark
+- 2026-01-04: loss curve smoother now
