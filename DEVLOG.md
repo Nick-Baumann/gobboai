@@ -229,3 +229,4 @@ A running notebook of changes, observations, and small experiments.
 - 2026-01-11: renamed a confusing field
 - 2026-01-11: promoted
 - 2026-01-12: 1.4x throughput on inference
+- 2026-01-12: fixed an off-by-one in the buffer iter
