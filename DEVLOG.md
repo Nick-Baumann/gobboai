@@ -233,3 +233,4 @@ A running notebook of changes, observations, and small experiments.
 - 2026-01-14: dropped a buggy feature flag
 - 2026-01-14: candidate passed at 58%
 - 2026-01-15: tightened the coach prompt
+- 2026-01-15: lowered batch size for stability
