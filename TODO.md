@@ -18,3 +18,4 @@ Loose tracker. Items here are nice-to-have, not promises.
 - [ ] found a bug in resign logic
 - [ ] swapped to a faster hashmap
 - [ ] 1.4x throughput on inference
+- [ ] split a long function
