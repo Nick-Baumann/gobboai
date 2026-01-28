@@ -245,3 +245,4 @@ A running notebook of changes, observations, and small experiments.
 - 2026-01-25: tightened the coach prompt
 - 2026-01-26: candidate failed gate, archived
 - 2026-01-27: fewer allocations in the hot loop
+- 2026-01-28: clarified a comment
