@@ -279,3 +279,4 @@ A running notebook of changes, observations, and small experiments.
 - 2026-02-17: candidate passed at 61%
 - 2026-02-17: added more telemetry
 - 2026-02-17: candidate failed gate, archived
+- 2026-02-18: swapped to a faster hashmap
