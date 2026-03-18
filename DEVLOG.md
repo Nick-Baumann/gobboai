@@ -315,3 +315,4 @@ A running notebook of changes, observations, and small experiments.
 - 2026-03-16: fixed an off-by-one in the buffer iter
 - 2026-03-17: wrote a quick repro
 - 2026-03-18: fixed a panic on empty PGN
+- 2026-03-18: loss curve smoother now
