@@ -11,3 +11,21 @@ candidate clears a 55% win-rate threshold.
 
 See the README for the high-level diagram. Each stage is described in detail in
 its own document under `docs/`.
+
+## Cadence
+
+A typical iteration completes in roughly 70 minutes on a Mac Mini M4. The
+orchestrator persists progress between stages so a kill-and-restart picks up
+cleanly.
+
+| Stage | Wall time |
+|-------|-----------|
+| Self-play | 28 min |
+| Training | 14 min |
+| Arena | 26 min |
+| Deployment | <1 sec |
+
+## Failure modes
+
+If a stage crashes, the orchestrator records the failure and retries up to 3
+times before halting. Halts surface to the dashboard as a red event card.
