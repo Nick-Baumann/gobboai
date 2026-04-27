@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://cdn.prod.website-files.com/69082c5061a39922df8ed3b6/69b88b355cf35e13745104a0_Mar%2016%2C%202026%2C%2010_58_53%20PM.png" alt="CLAWDIS" width="140" />
+  <img src="https://cdn.prod.website-files.com/69082c5061a39922df8ed3b6/69efdf09c6631af37f80efca_clawd-claude-code-terminal-mascot.png" alt="CLAWDIS" width="140" />
 </p>
 
 <h1 align="center">CLAWDIS OS</h1>
