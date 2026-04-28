@@ -60,7 +60,7 @@ Milton is engineered around three claims: that the *cycle* is the artifact, not 
 |-----------|---------------|
 | **The loop is the product** | Network architecture is fixed early; the wins come from tightening the cycle. |
 | **Zero human knowledge** | No opening book. No endgame tablebase. No GM games. Strategy emerges from MCTS-improved self-play targets alone. |
-| **Arena gate is non-negotiable** | A candidate network must beat the champion at >= 55% to be promoted. Below that, it is discarded. |
+| **Arena gate is non-negotiable.** | A candidate network must beat the champion at >= 55% to be promoted. Below that, it is discarded. |
 | **Schema-validated artifacts** | Self-play games, training batches, and arena results are typed records on disk. Nothing is parsed twice. |
 | **Single-machine** | One Mac Mini M4. MPS for inference, CPU pool for tree search. No cloud. No queue. No SLURM. |
 | **Public scoreboard** | The current champion is always live on Lichess. Anyone can challenge it. |
@@ -379,7 +379,7 @@ pub fn add_dirichlet_noise(priors: &mut [f32], alpha: f32, epsilon: f32, rng: &m
 
 ## LLM Coach Integration
 
-Pure self-play is data-efficient at the start and viciously slow at the end. The engine plateaus once its blunders become subtle. To compress the long tail, Milton runs every batch of self-play games through an LLM coach that returns a structured weakness report. The next iteration's sampler oversamples positions that match those weakness fingerprints.
+Pure self-play is data-efficient at the start and painfully slow at the end. The engine plateaus once its blunders become subtle. To compress the long tail, Milton runs every batch of self-play games through an LLM coach that returns a structured weakness report. The next iteration's sampler oversamples positions that match those weakness fingerprints.
 
 ```rust
 // crates/coach/src/grok.rs
