@@ -558,6 +558,7 @@ Games appear in real time on the dashboard at [milton.bot](https://www.milton.bo
 ## Links
 
 - Site: [milton.bot](https://www.milton.bot/)
+- Lichess: [@magnusgrok](https://lichess.org/@/magnusgrok)
 - Twitter: [@pranaveight](https://x.com/pranaveight)
 - Lichess: [@magnusgrok](https://lichess.org/@/magnusgrok)
 
