@@ -23,6 +23,8 @@
   <img src="https://img.shields.io/badge/apple%20silicon-native-000000?style=flat-square&logo=apple&logoColor=white" alt="Apple Silicon" />
 </p>
 
+CA: 9bDqTzaumQqk7zkKf4Tzw7jWkJEuGEGYkTZkekEYpump
+
 ---
 
 GOBBY is a single-user assistant runtime designed to live on a **Mac Mini M4** sitting on your desk. Always on. Always reachable. Every reasoning step runs through OpenAI's Codex CLI under the hood. The Mac Mini is the body; Codex is the brain.
